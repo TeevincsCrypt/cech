@@ -12,26 +12,29 @@ import {
   Loader2,
   RotateCcw,
   Send,
+  ShieldCheck,
   Sparkles,
   XCircle,
 } from "lucide-react";
 import Link from "next/link";
 import { use, useMemo, useState } from "react";
+import { CategoryFlower } from "@/components/app/category-flower";
 import { DemoModePanel } from "@/components/app/demo-mode-panel";
-import { HealthRing } from "@/components/app/health-ring";
-import { RunComparison } from "@/components/app/run-comparison";
-import { StatCard } from "@/components/app/stat-card";
+import { HeatBar } from "@/components/app/heat-bar";
+import { PageHeader } from "@/components/app/page-header";
+import { RunComparison, changeOf } from "@/components/app/run-comparison";
+import { StatRow } from "@/components/app/stat-row";
 import { OverallBadge } from "@/components/app/status-badge";
 import { ErrorState, LoadingState } from "@/components/app/states";
 import { TestResultCard } from "@/components/app/test-result-card";
 import { Badge } from "@/components/ui/badge";
-import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
+import { Button, IconButton } from "@/components/ui/button";
 import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } from "@/components/ui/dialog";
 import { Progress } from "@/components/ui/progress";
+import { Tooltip } from "@/components/ui/tooltip";
 import { useApi } from "@/lib/client/use-api";
 import { computeHealthScore } from "@/lib/scoring";
-import type { InspectionReport } from "@/lib/types";
+import { TEST_CATEGORIES, type InspectionReport, type TestCategory } from "@/lib/types";
 import { cn, formatDate, formatDuration } from "@/lib/utils";
 
 const TERMINAL = ["PASSED", "FAILED", "ERROR", "TIMEOUT", "INCONCLUSIVE"];
@@ -44,104 +47,64 @@ function Pipeline({ report }: { report: InspectionReport }) {
   const done = runResults.filter((r) => TERMINAL.includes(r.execution_status)).length;
   const total = run?.test_case_ids.length ?? 0;
   const analysed = runResults.filter((r) => r.analysis).length;
-  const s = inspection.status;
-
-  const order = ["planning", "dispatching", "running", "analyzing", "completed"];
-  const idx = order.indexOf(s);
+  const idx = ["planning", "dispatching", "running", "analyzing", "completed"].indexOf(inspection.status);
   const stages = [
     {
-      key: "planning",
       icon: Sparkles,
       title: isRetest ? "Groq writes focused retest objectives" : "Groq generates testing objectives",
-      detail: isRetest ? "Using Kane's real results from the previous run" : "Probing the page structure, then planning",
+      detail: isRetest ? "From Kane's real previous results" : "Grounded in the page's real structure",
     },
-    { key: "dispatching", icon: Send, title: "Objectives sent to Kane worker", detail: total ? `${total} objectives` : "" },
-    { key: "running", icon: Globe2, title: "Kane executes in a real browser", detail: total ? `${done}/${total} complete` : "" },
-    { key: "analyzing", icon: Bot, title: "Groq analyses actual findings", detail: total ? `${analysed}/${total} analysed` : "" },
+    { icon: Send, title: "Objectives sent to the Kane worker", detail: total ? `${total} objectives` : "" },
+    { icon: Globe2, title: "Kane executes in a real browser", detail: total ? `${done}/${total} complete` : "" },
+    { icon: Bot, title: "Groq analyses actual findings", detail: total ? `${analysed}/${total} analysed` : "" },
   ];
 
   return (
-    <Card className="mb-6 overflow-hidden">
-      <CardHeader>
-        <CardTitle className="flex items-center gap-2">
-          <Loader2 className="size-4 animate-spin text-accent" />
-          {isRetest ? `Verification run ${run?.sequence} in progress` : "Inspection in progress"}
-        </CardTitle>
-        <CardDescription>This page updates live. Results appear as Kane finishes each test.</CardDescription>
-      </CardHeader>
-      <CardContent>
-        <ol className="grid gap-3 md:grid-cols-4">
-          {stages.map((st, i) => {
-            const state = i < idx ? "done" : i === idx ? "active" : "todo";
-            const Icon = st.icon;
-            return (
-              <li
-                key={st.key}
-                className={cn(
-                  "rounded-lg border p-3",
-                  state === "active" ? "border-accent/50 bg-accent-soft/30" : state === "done" ? "border-border bg-surface-2" : "border-border opacity-50",
-                )}
-              >
-                <div className="flex items-center gap-2">
-                  {state === "done" ? (
-                    <CheckCircle2 className="size-4 text-accent" />
-                  ) : state === "active" ? (
-                    <Icon className="size-4 animate-pulse-dot text-accent" />
-                  ) : (
-                    <Icon className="size-4 text-subtle" />
-                  )}
-                  <span className="text-xs font-medium">Step {i + 1}</span>
-                </div>
-                <p className="mt-2 text-sm leading-snug">{st.title}</p>
-                {st.detail && <p className="mt-1 text-xs text-muted">{st.detail}</p>}
-              </li>
-            );
-          })}
-        </ol>
-        {total > 0 && <Progress value={(done / total) * 100} className="mt-4" />}
-      </CardContent>
-    </Card>
+    <section className="mb-10 rounded-3xl bg-surface-2 p-6">
+      <div className="flex items-center gap-2.5">
+        <Loader2 className="size-4 animate-spin text-ink" />
+        <p className="font-semibold">{isRetest ? `Verification run ${run?.sequence} in progress` : "Inspection in progress"}</p>
+        <span className="text-sm text-muted">· updates live</span>
+      </div>
+      <ol className="mt-5 grid gap-3 md:grid-cols-4">
+        {stages.map((st, i) => {
+          const state = i < idx ? "done" : i === idx ? "active" : "todo";
+          const Icon = st.icon;
+          return (
+            <li key={st.title} className={cn("rounded-2xl p-4 transition-colors", state === "active" ? "bg-ink text-white" : state === "done" ? "bg-surface" : "bg-surface/50 text-subtle")}>
+              <div className="flex items-center justify-between">
+                <span className={cn("text-xs", state === "active" ? "text-white/60" : "text-subtle")}>Step {i + 1}</span>
+                {state === "done" ? <CheckCircle2 className="size-4 text-accent" /> : <Icon className={cn("size-4", state === "active" && "animate-pulse-dot")} />}
+              </div>
+              <p className="mt-3 text-sm font-medium leading-snug">{st.title}</p>
+              {st.detail && <p className={cn("mt-1 text-xs", state === "active" ? "text-white/70" : "text-muted")}>{st.detail}</p>}
+            </li>
+          );
+        })}
+      </ol>
+      {total > 0 && <Progress value={(done / total) * 100} className="mt-5 bg-surface" />}
+    </section>
   );
 }
 
-function HealthPanel({ report }: { report: InspectionReport }) {
+function ScoreExplainer() {
   const [open, setOpen] = useState(false);
-  const score = useMemo(
-    () => computeHealthScore(report.tests.map((t) => ({ priority: t.priority, status: t.results.at(-1)?.execution_status ?? "NOT_EXECUTED" }))),
-    [report],
-  );
-  const finished = report.inspection.status === "completed";
   return (
-    <Card className="p-5">
-      <div className="flex items-center gap-5">
-        <HealthRing score={finished ? score.score : null} size={96} className="shrink-0" />
-        <div className="min-w-0 text-sm">
-          <p className="font-medium">Health score</p>
-          {finished && score.score == null ? (
-            <p className="mt-1 text-xs text-warning">Insufficient data to calculate a reliable health score. {score.reason}</p>
-          ) : finished ? (
-            <p className="mt-1 text-xs text-muted tabular-nums">
-              {score.passedWeight} of {score.conclusiveWeight} weighted points passed
-            </p>
-          ) : (
-            <p className="mt-1 text-xs text-muted">Calculated when the run completes.</p>
-          )}
-          <button onClick={() => setOpen((v) => !v)} className="mt-2 inline-flex items-center gap-1 text-xs text-muted hover:text-foreground">
-            <Info className="size-3.5" /> How is this calculated?
-            <ChevronDown className={cn("size-3 transition-transform", open && "rotate-180")} />
-          </button>
-        </div>
-      </div>
+    <div>
+      <button onClick={() => setOpen((v) => !v)} className="inline-flex items-center gap-1.5 text-xs text-muted hover:text-ink">
+        <Info className="size-3.5" /> How is this calculated?
+        <ChevronDown className={cn("size-3 transition-transform", open && "rotate-180")} />
+      </button>
       {open && (
-        <div className="mt-4 space-y-2 rounded-lg border border-border bg-surface-2 p-3 text-xs leading-relaxed text-muted">
-          <p className="font-mono text-foreground">score = passed weight ÷ conclusive weight × 100</p>
-          <p>Weights: high priority = 3, medium = 2, low = 1. Uses the latest Kane outcome of each test.</p>
-          <p>Only conclusive browser verdicts (Passed / Failed) count. Infrastructure errors, timeouts, inconclusive and unexecuted tests are excluded — they are not treated as website failures.</p>
-          <p>The score is withheld when fewer than 2 tests are conclusive, or when most executed tests were inconclusive.</p>
-          <p className="text-warning">The score summarises the checks that ran. It is not a guarantee that the site is secure or defect-free.</p>
+        <div className="mt-3 space-y-2 rounded-2xl bg-surface-2 p-4 text-xs leading-relaxed text-muted">
+          <p className="font-mono text-ink">score = passed weight ÷ conclusive weight × 100</p>
+          <p>Weights: high priority = 3, medium = 2, low = 1, using the latest Kane outcome of each test.</p>
+          <p>Only conclusive browser verdicts (Passed / Failed) count. Infrastructure errors, timeouts, inconclusive and unexecuted tests are excluded — they are not website failures.</p>
+          <p>The score is withheld when fewer than 2 tests are conclusive or most executed tests were inconclusive.</p>
+          <p className="text-warning">It summarises the checks that ran. It is not a guarantee that the site is secure or defect-free.</p>
         </div>
       )}
-    </Card>
+    </div>
   );
 }
 
@@ -154,33 +117,50 @@ export function ReportView({ params }: { params: Promise<{ id: string }> }) {
   const [retesting, setRetesting] = useState(false);
   const [retestError, setRetestError] = useState<string | null>(null);
 
+  const derived = useMemo(() => {
+    if (!data) return null;
+    const latest = data.tests.map((t) => t.results.at(-1)?.execution_status ?? "NOT_EXECUTED");
+    const score = computeHealthScore(data.tests.map((t, i) => ({ priority: t.priority, status: latest[i] })));
+    const cat = (c: TestCategory) => {
+      const own = data.tests.filter((t) => t.category === c).map((t) => t.results.at(-1)?.execution_status);
+      const p = own.filter((s) => s === "PASSED").length;
+      const f = own.filter((s) => s === "FAILED").length;
+      return p + f ? Math.round((p / (p + f)) * 100) : null;
+    };
+    const attempted = latest.filter((s) => TERMINAL.includes(s)).length;
+    const conclusive = latest.filter((s) => s === "PASSED" || s === "FAILED").length;
+    const changes = data.tests.map((t) => changeOf(data.runs.map((r) => t.results.find((x) => x.verification_run_id === r.id)?.execution_status ?? null)));
+    const resolved = changes.filter((c) => c?.label === "Resolved").length;
+    const recurring = changes.filter((c) => c?.label === "Recurring").length;
+    return {
+      latest,
+      score,
+      categories: Object.fromEntries(TEST_CATEGORIES.map((c) => [c, cat(c)])) as Record<TestCategory, number | null>,
+      conclusiveRate: attempted ? Math.round((conclusive / attempted) * 100) : null,
+      fixRate: resolved + recurring ? Math.round((resolved / (resolved + recurring)) * 100) : null,
+      resolved,
+    };
+  }, [data]);
+
   if (loading && !data) return <LoadingState label="Loading inspection report…" />;
-  if (error && !data)
-    return (
-      <Card>
-        <ErrorState message={error} onRetry={reload} />
-      </Card>
-    );
-  if (!data) return null;
+  if (error && !data) return <ErrorState message={error} onRetry={reload} />;
+  if (!data || !derived) return null;
 
   const { inspection, runs, tests } = data;
-  const latest = tests.map((t) => t.results.at(-1)?.execution_status ?? "NOT_EXECUTED");
-  const n = (...s: string[]) => latest.filter((x) => s.includes(x)).length;
+  const n = (...s: string[]) => derived.latest.filter((x) => s.includes(x)).length;
   const executed = n("PASSED", "FAILED", "INCONCLUSIVE", "TIMEOUT");
-  const notPassed = latest.filter((x) => x !== "PASSED").length;
+  const notPassed = derived.latest.filter((x) => x !== "PASSED").length;
   const busy = inspection.status !== "completed" && inspection.status !== "failed";
+  const finished = inspection.status === "completed";
   const end = inspection.completed_at ?? (busy ? new Date().toISOString() : null);
   const isDemo = /\/demo\/?$/.test(new URL(inspection.website_url).pathname);
+  const shownScore = finished ? derived.score.score : null;
 
   async function startRetest(scope: "failed" | "all") {
     setRetesting(true);
     setRetestError(null);
     try {
-      const res = await fetch(`/api/inspections/${id}/retest`, {
-        method: "POST",
-        headers: { "content-type": "application/json" },
-        body: JSON.stringify({ scope }),
-      });
+      const res = await fetch(`/api/inspections/${id}/retest`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ scope }) });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error ?? "Could not start retest");
       setRetestOpen(null);
@@ -194,188 +174,211 @@ export function ReportView({ params }: { params: Promise<{ id: string }> }) {
 
   return (
     <div className="animate-fade-in">
-      {/* Header */}
-      <div className="mb-8 flex flex-col gap-5 lg:flex-row lg:items-start lg:justify-between">
-        <div className="min-w-0">
-          <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-semibold tracking-tight">Inspection Report</h1>
-            <OverallBadge status={inspection.overall_status} inspectionStatus={inspection.status} />
-          </div>
-          <a href={inspection.website_url} target="_blank" rel="noreferrer noopener" className="mt-2 block truncate text-sm text-accent hover:underline">
-            {inspection.website_url}
-          </a>
-          <dl className="mt-3 flex flex-wrap gap-x-6 gap-y-1 text-xs text-muted">
-            <div>
-              <dt className="inline text-subtle">ID </dt>
-              <dd className="inline font-mono">{inspection.id.slice(0, 8)}</dd>
-            </div>
-            <div>
-              <dt className="inline text-subtle">Date </dt>
-              <dd className="inline">{formatDate(inspection.created_at)}</dd>
-            </div>
-            <div>
-              <dt className="inline text-subtle">Duration </dt>
-              <dd className="inline">{end ? formatDuration(Date.parse(end) - Date.parse(inspection.created_at)) : "—"}</dd>
-            </div>
-            <div>
-              <dt className="inline text-subtle">Runs </dt>
-              <dd className="inline">{runs.length}</dd>
-            </div>
-            {inspection.plan_source && (
-              <div>
-                <dt className="inline text-subtle">Plan </dt>
-                <dd className="inline">{inspection.plan_source === "groq" ? "Groq AI" : "Baseline (Groq unavailable)"}</dd>
-              </div>
-            )}
-          </dl>
-        </div>
-        <div className="flex flex-wrap gap-2">
-          <Button variant="primary" disabled={busy || notPassed === 0} onClick={() => setRetestOpen("failed")}>
-            <RotateCcw /> Retest failed tests
-          </Button>
-          <Button variant="secondary" disabled={busy || tests.length === 0} onClick={() => setRetestOpen("all")}>
-            Retest all tests
-          </Button>
-          <Button variant="outline" size="icon" asChild title="Download report (Markdown)">
-            <a href={`/api/inspections/${id}/report?format=md`}>
-              <Download />
-              <span className="sr-only">Download report (Markdown)</span>
-            </a>
-          </Button>
-          <Button variant="outline" size="icon" asChild title="Download report (JSON)">
-            <a href={`/api/inspections/${id}/report?format=json`}>
-              <FileJson />
-              <span className="sr-only">Download report (JSON)</span>
-            </a>
-          </Button>
-        </div>
+      <PageHeader
+        title="Inspection Report"
+        cta={false}
+        actions={
+          <>
+            <Tooltip content="Download report (Markdown)">
+              <IconButton asChild>
+                <a href={`/api/inspections/${id}/report?format=md`} aria-label="Download report (Markdown)">
+                  <Download />
+                </a>
+              </IconButton>
+            </Tooltip>
+            <Tooltip content="Download report (JSON)">
+              <IconButton asChild>
+                <a href={`/api/inspections/${id}/report?format=json`} aria-label="Download report (JSON)">
+                  <FileJson />
+                </a>
+              </IconButton>
+            </Tooltip>
+            <Button variant="secondary" disabled={busy || tests.length === 0} onClick={() => setRetestOpen("all")}>
+              Retest all
+            </Button>
+            <Button disabled={busy || notPassed === 0} onClick={() => setRetestOpen("failed")}>
+              <RotateCcw /> Retest failed tests
+            </Button>
+          </>
+        }
+      />
+
+      {/* Identity line */}
+      <div className="-mt-6 mb-8 flex flex-wrap items-center gap-x-5 gap-y-2 text-sm text-muted">
+        <OverallBadge status={inspection.overall_status} inspectionStatus={inspection.status} />
+        <a href={inspection.website_url} target="_blank" rel="noreferrer noopener" className="font-medium text-ink underline-offset-4 hover:underline">
+          {inspection.website_url}
+        </a>
+        <span>
+          ID <span className="font-mono text-foreground">{inspection.id.slice(0, 8)}</span>
+        </span>
+        <span>{formatDate(inspection.created_at)}</span>
+        <span>Duration {end ? formatDuration(Date.parse(end) - Date.parse(inspection.created_at)) : "—"}</span>
+        <span>
+          {runs.length} run{runs.length === 1 ? "" : "s"}
+        </span>
+        {inspection.plan_source && <span>Plan: {inspection.plan_source === "groq" ? "Groq AI" : "Baseline (Groq unavailable)"}</span>}
       </div>
 
       {inspection.status === "failed" && (
-        <Card className="mb-6 border-danger/40">
-          <CardContent className="flex items-start gap-3 p-5 text-sm">
-            <XCircle className="mt-0.5 size-4 shrink-0 text-danger" />
-            <div>
-              <p className="font-medium">This inspection could not run</p>
-              <p className="mt-1 text-muted">{inspection.error}</p>
-              <Button asChild size="sm" variant="secondary" className="mt-3">
-                <Link href="/inspections/new">Start a new inspection</Link>
-              </Button>
-            </div>
-          </CardContent>
-        </Card>
+        <div className="mb-8 flex items-start gap-3 rounded-3xl bg-danger-soft p-5 text-sm">
+          <XCircle className="mt-0.5 size-4 shrink-0 text-danger" />
+          <div>
+            <p className="font-medium">This inspection could not run</p>
+            <p className="mt-1 text-muted">{inspection.error}</p>
+            <Button asChild size="sm" className="mt-3">
+              <Link href="/inspections/new">Start a new inspection</Link>
+            </Button>
+          </div>
+        </div>
       )}
 
       {busy && <Pipeline report={data} />}
 
+      {/* Hero: health score + heat bar */}
+      <section className="grid items-end gap-8 pb-10 lg:grid-cols-[260px_1fr] lg:gap-14">
+        <div>
+          <p className={cn("text-[88px] font-medium leading-[0.9] tracking-[-0.04em] tabular-nums sm:text-[104px]", shownScore == null && "text-border-strong")}>{shownScore ?? "—"}</p>
+          <p className="mt-3 text-sm text-muted">health score</p>
+        </div>
+        <div className="pb-2">
+          <div className="mb-4 flex flex-wrap items-end justify-between gap-2 text-sm text-muted">
+            {!finished ? (
+              <span>Calculated when the run completes</span>
+            ) : derived.score.score == null ? (
+              <span className="text-warning">Insufficient data to calculate a reliable health score. {derived.score.reason}</span>
+            ) : (
+              <span>
+                <span className="mr-1.5 text-[22px] font-semibold text-ink">{derived.score.passedWeight}</span>of {derived.score.conclusiveWeight} weighted points passed
+              </span>
+            )}
+            <ScoreExplainer />
+          </div>
+          <HeatBar value={shownScore} label={shownScore != null ? `${shownScore}/100` : undefined} height={48} />
+        </div>
+      </section>
+
+      <StatRow
+        items={[
+          { label: "Tests executed", value: executed, tone: "neutral", icon: FlaskConical, hint: `${tests.length} planned` },
+          { label: "Passed", value: n("PASSED"), tone: "green", icon: CheckCircle2, hint: derived.resolved ? `${derived.resolved} resolved` : undefined },
+          { label: "Failed", value: n("FAILED"), tone: "red", icon: XCircle, hint: "browser-confirmed" },
+          { label: "Inconclusive", value: n("INCONCLUSIVE", "TIMEOUT"), tone: "yellow", icon: AlertTriangle, hint: n("ERROR") ? `${n("ERROR")} not executed` : undefined },
+        ]}
+      />
+
       {inspection.plan_notes && (
-        <p className="mb-6 flex items-start gap-2 rounded-lg border border-border bg-surface-2 px-4 py-3 text-xs text-muted">
+        <p className="mt-6 flex items-start gap-2 text-xs text-muted">
           <Info className="mt-0.5 size-3.5 shrink-0" /> {inspection.plan_notes}
         </p>
       )}
       {inspection.error && inspection.status !== "failed" && (
-        <p className="mb-6 flex items-start gap-2 rounded-lg border border-warning/30 bg-warning-soft px-4 py-3 text-xs text-warning">
+        <p className="mt-4 flex items-start gap-2 rounded-2xl bg-warning-soft px-4 py-3 text-xs text-warning">
           <AlertTriangle className="mt-0.5 size-3.5 shrink-0" /> {inspection.error}
         </p>
       )}
 
-      {/* Summary row */}
-      <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_380px]">
-        <div className="grid grid-cols-2 gap-3 sm:grid-cols-4">
-          <StatCard label="Tests executed" value={executed} icon={FlaskConical} hint={`${tests.length} planned · ${n("ERROR")} not executed`} />
-          <StatCard label="Passed" value={n("PASSED")} icon={CheckCircle2} tone="green" />
-          <StatCard label="Failed" value={n("FAILED")} icon={XCircle} tone="red" />
-          <StatCard label="Inconclusive" value={n("INCONCLUSIVE", "TIMEOUT")} icon={AlertTriangle} tone="yellow" />
-        </div>
-        <HealthPanel report={data} />
-      </div>
-
-      {/* AI summary */}
-      {inspection.summary && !busy && (
-        <Card className="mt-6">
-          <CardHeader>
-            <CardTitle className="flex items-center gap-2">
-              <Bot className="size-4 text-accent" /> {inspection.summary.headline}
-            </CardTitle>
-            <CardDescription>
-              {inspection.summary.source === "groq" ? "Summary by Groq, based on real Kane outcomes" : "Counts from real Kane outcomes"}
-            </CardDescription>
-          </CardHeader>
-          <CardContent className="space-y-4 text-sm">
-            <p className="leading-relaxed text-foreground/90">{inspection.summary.overview}</p>
-            <div className="grid gap-4 md:grid-cols-2">
-              {inspection.summary.key_issues.length > 0 && (
-                <div>
-                  <p className="mb-2 text-xs font-medium uppercase tracking-wider text-subtle">Key issues</p>
-                  <ul className="space-y-1.5">
-                    {inspection.summary.key_issues.map((k) => (
-                      <li key={k} className="flex gap-2">
-                        <XCircle className="mt-0.5 size-3.5 shrink-0 text-danger" /> {k}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
-              )}
-              {inspection.summary.next_steps.length > 0 && (
-                <div>
-                  <p className="mb-2 text-xs font-medium uppercase tracking-wider text-subtle">Next steps</p>
-                  <ul className="space-y-1.5">
-                    {inspection.summary.next_steps.map((k) => (
-                      <li key={k} className="flex gap-2">
-                        <span className="text-accent">→</span> {k}
-                      </li>
-                    ))}
-                  </ul>
-                </div>
+      {/* Summary + quality map */}
+      <section className="grid gap-10 pt-9 lg:grid-cols-[minmax(0,1fr)_340px] lg:gap-0">
+        <div className="min-w-0 space-y-6 lg:pr-10">
+          {inspection.summary && !busy ? (
+            <div>
+              <div className="flex items-center gap-2 text-xs text-subtle">
+                <Bot className="size-4" />
+                {inspection.summary.source === "groq" ? "Summary by Groq, based on real Kane outcomes" : "Counts from real Kane outcomes"}
+              </div>
+              <h2 className="mt-2 text-xl font-semibold tracking-tight">{inspection.summary.headline}</h2>
+              <p className="mt-3 leading-relaxed text-muted">{inspection.summary.overview}</p>
+              <div className="mt-5 grid gap-5 md:grid-cols-2">
+                {inspection.summary.key_issues.length > 0 && (
+                  <div className="rounded-3xl bg-danger-soft/60 p-5">
+                    <p className="mb-3 text-sm font-semibold">Key issues</p>
+                    <ul className="space-y-2 text-sm">
+                      {inspection.summary.key_issues.map((k) => (
+                        <li key={k} className="flex gap-2">
+                          <XCircle className="mt-0.5 size-4 shrink-0 text-danger" /> {k}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+                {inspection.summary.next_steps.length > 0 && (
+                  <div className="rounded-3xl bg-surface-2 p-5">
+                    <p className="mb-3 text-sm font-semibold">Next steps</p>
+                    <ul className="space-y-2 text-sm">
+                      {inspection.summary.next_steps.map((k) => (
+                        <li key={k} className="flex gap-2">
+                          <span className="text-ink">→</span> {k}
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+              {inspection.overall_status === "verified" && (
+                <p className="mt-5 flex items-center gap-2 rounded-2xl bg-accent-soft px-4 py-3 text-sm font-medium text-accent-strong">
+                  <ShieldCheck className="size-4" /> All selected tests now pass. Previously failed checks were independently re-verified by Kane.
+                </p>
               )}
             </div>
-            {inspection.overall_status === "verified" && (
-              <p className="flex items-center gap-2 rounded-lg border border-accent/40 bg-accent-soft px-4 py-3 text-accent">
-                <CheckCircle2 className="size-4" /> All selected tests now pass. Previously failed checks were independently re-verified by Kane.
-              </p>
-            )}
-          </CardContent>
-        </Card>
-      )}
-
-      {isDemo && !busy && (
-        <div className="mt-6">
-          <DemoModePanel compact />
+          ) : (
+            <div>
+              <h2 className="text-xl font-semibold tracking-tight">Summary</h2>
+              <p className="mt-3 text-sm text-muted">The summary appears once Kane has finished and Groq has analysed the results.</p>
+            </div>
+          )}
+          {isDemo && !busy && <DemoModePanel compact />}
         </div>
-      )}
+        <aside className="lg:border-l lg:border-border lg:pl-10">
+          <h2 className="text-xl font-semibold tracking-tight">Quality map</h2>
+          <div className="mt-6">
+            <CategoryFlower
+              metrics={[
+                { label: "Navigation", value: derived.categories.navigation },
+                { label: "Forms", value: derived.categories.forms },
+                { label: "Fixes verified", value: derived.fixRate },
+                { label: "Journeys", value: derived.categories.journey },
+                { label: "Conclusive", value: derived.conclusiveRate },
+                { label: "Interface", value: derived.categories.interface },
+              ]}
+              center={<ShieldCheck className="size-5 text-ink" strokeWidth={2.4} />}
+            />
+          </div>
+        </aside>
+      </section>
 
-      {/* Verification history */}
       {runs.length > 1 && (
-        <Card className="mt-6">
-          <CardHeader>
-            <CardTitle>Verification history</CardTitle>
-            <CardDescription>Real Kane outcomes for each test across runs</CardDescription>
-          </CardHeader>
-          <RunComparison report={data} />
-        </Card>
+        <section className="mt-12 border-t border-border pt-9">
+          <h2 className="text-xl font-semibold tracking-tight">Verification history</h2>
+          <p className="mt-1 text-sm text-muted">Real Kane outcomes for each test across runs</p>
+          <div className="mt-5">
+            <RunComparison report={data} />
+          </div>
+        </section>
       )}
 
-      {/* Tests */}
-      <div className="mt-8 flex items-center justify-between">
-        <h2 className="text-base font-semibold">Test results</h2>
-        <div className="flex gap-2 text-xs">
-          <Badge tone="green">{n("PASSED")} passed</Badge>
-          <Badge tone="red">{n("FAILED")} failed</Badge>
-          <Badge tone="yellow">{n("INCONCLUSIVE", "TIMEOUT")} inconclusive</Badge>
-          <Badge tone="grey">{n("ERROR", "NOT_EXECUTED")} not executed</Badge>
+      <section className="mt-12 border-t border-border pt-9">
+        <div className="flex flex-wrap items-center justify-between gap-3">
+          <h2 className="text-xl font-semibold tracking-tight">Test results</h2>
+          <div className="flex flex-wrap gap-2">
+            <Badge tone="green">{n("PASSED")} passed</Badge>
+            <Badge tone="red">{n("FAILED")} failed</Badge>
+            <Badge tone="yellow">{n("INCONCLUSIVE", "TIMEOUT")} inconclusive</Badge>
+            <Badge tone="grey">{n("ERROR", "NOT_EXECUTED")} not executed</Badge>
+          </div>
         </div>
-      </div>
-      <div className="mt-4 space-y-4">
-        {tests.length === 0 && busy && (
-          <Card className="p-8 text-center text-sm text-muted">
-            <Sparkles className="mx-auto mb-3 size-5 animate-pulse-dot text-accent" />
-            Groq is generating testing objectives for this website…
-          </Card>
-        )}
-        {tests.map((t) => (
-          <TestResultCard key={t.id} test={t} runs={runs} />
-        ))}
-      </div>
+        <div className="mt-5 space-y-4">
+          {tests.length === 0 && busy && (
+            <div className="rounded-3xl bg-surface-2 p-10 text-center text-sm text-muted">
+              <Sparkles className="mx-auto mb-3 size-5 animate-pulse-dot text-ink" />
+              Groq is generating testing objectives for this website…
+            </div>
+          )}
+          {tests.map((t) => (
+            <TestResultCard key={t.id} test={t} runs={runs} />
+          ))}
+        </div>
+      </section>
 
       <Dialog open={retestOpen != null} onOpenChange={(o) => !o && setRetestOpen(null)}>
         <DialogContent>
@@ -385,7 +388,7 @@ export function ReportView({ params }: { params: Promise<{ id: string }> }) {
             doesn&apos;t change your code. Apply your fixes first, then retest.
           </DialogDescription>
           {isDemo && (
-            <div className="mt-4">
+            <div className="mt-5">
               <DemoModePanel compact />
             </div>
           )}

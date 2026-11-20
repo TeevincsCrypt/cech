@@ -1,54 +1,52 @@
-import { ArrowUpRight } from "lucide-react";
+import { ArrowUpRight, CalendarDays, MoreVertical } from "lucide-react";
 import Link from "next/link";
+import { ProgressRing } from "@/components/app/progress-ring";
+import { SiteTile } from "@/components/app/site-tile";
 import { OverallBadge } from "@/components/app/status-badge";
 import type { InspectionListItem } from "@/lib/server/read-models";
-import { formatDate, hostOf } from "@/lib/utils";
+import { formatDate, formatDay, hostOf } from "@/lib/utils";
 
-export function InspectionsTable({ items, showRuns, compact }: { items: InspectionListItem[]; showRuns?: boolean; compact?: boolean }) {
+function passRate(i: InspectionListItem) {
+  const conclusive = i.passed + i.failed;
+  return conclusive ? Math.round((i.passed / conclusive) * 100) : null;
+}
+
+/** List rows in the style of the reference "Top learners" table. */
+export function InspectionsTable({ items, showRuns }: { items: InspectionListItem[]; showRuns?: boolean; compact?: boolean }) {
   return (
-    <div className="overflow-x-auto scrollbar-thin">
-      <table className={`w-full text-sm ${compact ? "min-w-[560px]" : "min-w-[720px]"}`}>
-        <thead>
-          <tr className="border-b border-border text-left text-xs uppercase tracking-wider text-subtle">
-            <th className="px-5 py-3 font-medium">Website</th>
-            {!compact && <th className="px-3 py-3 font-medium">Inspection date</th>}
-            <th className="px-3 py-3 text-right font-medium">{compact ? "Executed" : "Tests executed"}</th>
-            <th className="px-3 py-3 text-right font-medium">Passed</th>
-            <th className="px-3 py-3 text-right font-medium">Failed</th>
-            {showRuns && <th className="px-3 py-3 text-right font-medium">Score</th>}
-            {showRuns && <th className="px-3 py-3 text-right font-medium">Runs</th>}
-            <th className="px-3 py-3 font-medium">{compact ? "Status" : "Overall status"}</th>
-            <th className="px-5 py-3 text-right font-medium">Report</th>
-          </tr>
-        </thead>
-        <tbody>
-          {items.map((i) => (
-            <tr key={i.id} className="border-b border-border/60 last:border-0 hover:bg-surface-2/60">
-              <td className="max-w-[240px] px-5 py-3.5">
-                <span className="block truncate font-medium">{hostOf(i.website_url)}</span>
-                {compact && <span className="block text-xs text-subtle">{formatDate(i.created_at)}</span>}
-              </td>
-              {!compact && <td className="px-3 py-3.5 text-muted">{formatDate(i.created_at)}</td>}
-              <td className="px-3 py-3.5 text-right tabular-nums">
-                {i.executed}
-                <span className="text-subtle">/{i.tests}</span>
-              </td>
-              <td className="px-3 py-3.5 text-right tabular-nums text-accent">{i.passed}</td>
-              <td className={`px-3 py-3.5 text-right tabular-nums ${i.failed ? "text-danger" : "text-subtle"}`}>{i.failed}</td>
-              {showRuns && <td className="px-3 py-3.5 text-right tabular-nums">{i.health_score ?? "—"}</td>}
-              {showRuns && <td className="px-3 py-3.5 text-right tabular-nums text-muted">{i.runs}</td>}
-              <td className="px-3 py-3.5">
+    <ul className="divide-y divide-border">
+      {items.map((i) => {
+        const rate = passRate(i);
+        return (
+          <li key={i.id}>
+            <Link href={`/inspections/${i.id}`} className="group grid grid-cols-[auto_1fr_auto] items-center gap-x-4 gap-y-2 py-4 sm:grid-cols-[auto_minmax(0,1.6fr)_minmax(0,1fr)_minmax(0,0.9fr)_minmax(0,0.8fr)_auto]">
+              <SiteTile url={i.website_url} score={i.health_score} />
+              <div className="min-w-0">
+                <p className="truncate text-[15px] font-medium group-hover:underline">{hostOf(i.website_url)}</p>
+                <p className="mt-0.5 truncate text-xs text-subtle">
+                  {i.executed}/{i.tests} tests executed{showRuns && ` · ${i.runs} run${i.runs === 1 ? "" : "s"}`}
+                  {i.resolved > 0 && <span className="text-accent"> · {i.resolved} resolved</span>}
+                  {i.recurring > 0 && <span className="text-danger"> · {i.recurring} recurring</span>}
+                </p>
+              </div>
+              <div className="col-start-2 row-start-2 sm:col-start-auto sm:row-start-auto">
                 <OverallBadge status={i.overall_status} inspectionStatus={i.status} />
-              </td>
-              <td className="px-5 py-3.5 text-right">
-                <Link href={`/inspections/${i.id}`} className="inline-flex items-center gap-1 text-sm text-muted hover:text-accent">
-                  View <ArrowUpRight className="size-3.5" />
-                </Link>
-              </td>
-            </tr>
-          ))}
-        </tbody>
-      </table>
-    </div>
+              </div>
+              <span className="hidden items-center gap-2 whitespace-nowrap text-sm text-foreground sm:flex" title={formatDate(i.created_at)}>
+                <CalendarDays className="size-4 text-subtle" /> {formatDay(i.created_at)}
+              </span>
+              <span className="hidden items-center gap-2.5 text-sm tabular-nums sm:flex" title="Pass rate across conclusive Kane verdicts">
+                <ProgressRing value={rate} color={rate != null && rate < 60 ? "var(--danger)" : rate != null && rate >= 85 ? "var(--accent)" : "var(--info)"} />
+                {rate == null ? "—" : `${rate}%`}
+              </span>
+              <span className="flex size-8 items-center justify-center rounded-full text-subtle group-hover:bg-surface-2 group-hover:text-ink" aria-hidden>
+                <MoreVertical className="size-4 group-hover:hidden" />
+                <ArrowUpRight className="hidden size-4 group-hover:block" />
+              </span>
+            </Link>
+          </li>
+        );
+      })}
+    </ul>
   );
 }

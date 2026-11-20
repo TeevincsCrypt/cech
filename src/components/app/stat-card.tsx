@@ -17,19 +17,17 @@ export function StatCard({
   tone?: "default" | "green" | "red" | "yellow";
   loading?: boolean;
 }) {
-  const color = tone === "green" ? "text-accent" : tone === "red" ? "text-danger" : tone === "yellow" ? "text-warning" : "text-muted";
+  const chip = tone === "green" ? "bg-accent" : tone === "red" ? "bg-danger" : tone === "yellow" ? "bg-warning" : "bg-ink";
   return (
-    <Card className="p-5">
+    <Card className="rounded-2xl p-5">
       <div className="flex items-center justify-between">
-        <span className="text-xs font-medium uppercase tracking-wider text-subtle">{label}</span>
-        <Icon className={cn("size-4", color)} />
+        <span className="text-sm text-foreground">{label}</span>
+        <span className={cn("flex size-[22px] items-center justify-center rounded-md text-white", chip)}>
+          <Icon className="size-3.5" strokeWidth={2.5} />
+        </span>
       </div>
-      {loading ? (
-        <Skeleton className="mt-3 h-8 w-16" />
-      ) : (
-        <div className="mt-2 text-3xl font-semibold tabular-nums tracking-tight">{value ?? "—"}</div>
-      )}
-      {hint && <p className="mt-1 text-xs text-subtle">{hint}</p>}
+      {loading ? <Skeleton className="mt-3 h-8 w-16" /> : <div className="mt-3 text-[28px] font-medium leading-none tabular-nums tracking-tight">{value ?? "—"}</div>}
+      {hint && <p className="mt-2 text-xs text-subtle">{hint}</p>}
     </Card>
   );
 }

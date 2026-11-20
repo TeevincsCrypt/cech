@@ -24,8 +24,8 @@ export function RunComparison({ report }: { report: InspectionReport }) {
     <div className="overflow-x-auto scrollbar-thin">
       <table className="w-full min-w-[560px] text-sm">
         <thead>
-          <tr className="border-b border-border text-left text-xs uppercase tracking-wider text-subtle">
-            <th className="px-5 py-3 font-medium">Test</th>
+          <tr className="border-b border-border text-left text-xs text-subtle">
+            <th className="py-3 pr-5 font-medium">Test</th>
             {runs.map((r) => (
               <th key={r.id} className="px-3 py-3 font-medium">
                 Run {r.sequence}
@@ -41,7 +41,7 @@ export function RunComparison({ report }: { report: InspectionReport }) {
             const change = changeOf(statuses);
             return (
               <tr key={t.id} className="border-b border-border/60 last:border-0">
-                <td className="max-w-[260px] truncate px-5 py-3">{t.title}</td>
+                <td className="max-w-[260px] truncate py-3.5 pr-5 font-medium">{t.title}</td>
                 {statuses.map((s, i) => (
                   <td key={runs[i].id} className="px-3 py-3">
                     {s ? <ExecutionBadge status={s} /> : <span className="flex items-center text-xs text-subtle"><ArrowRight className="mr-1 size-3" />not rerun</span>}

@@ -5,7 +5,6 @@ import { useState } from "react";
 import { DemoModePanel } from "@/components/app/demo-mode-panel";
 import { PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent } from "@/components/ui/card";
 import { Checkbox } from "@/components/ui/checkbox";
 import { Input, Label, Textarea } from "@/components/ui/input";
 import { CATEGORY_DETAILS } from "@/lib/categories";
@@ -26,10 +25,10 @@ function clientValidate(url: string): string | null {
 
 function Step({ n, title, children }: { n: number; title: string; children: React.ReactNode }) {
   return (
-    <section className="grid gap-4 md:grid-cols-[180px_1fr]">
+    <section className="grid gap-4 border-t border-border pt-8 first:border-0 first:pt-0 md:grid-cols-[200px_1fr]">
       <div className="flex items-center gap-3 md:block">
-        <span className="flex size-7 items-center justify-center rounded-full border border-border-strong bg-surface-2 text-xs font-semibold tabular-nums text-muted">{n}</span>
-        <p className="text-sm font-medium md:mt-3">{title}</p>
+        <span className="text-[44px] font-medium leading-none tracking-tight text-border-strong tabular-nums">0{n}</span>
+        <p className="text-[15px] font-semibold md:mt-3">{title}</p>
       </div>
       <div className="min-w-0">{children}</div>
     </section>
@@ -80,16 +79,15 @@ export function NewInspectionForm() {
 
   return (
     <div className="animate-fade-in">
-      <PageHeader title="New Inspection" description="Groq plans the tests. Kane executes them in a real browser. You get evidence, not guesses." />
+      <PageHeader title="New Inspection" description="Groq plans the tests. Kane executes them in a real browser. You get evidence, not guesses." cta={false} />
       <form onSubmit={submit} noValidate>
-        <Card>
-          <CardContent className="space-y-10 p-6 sm:p-8">
+        <div className="space-y-8">
             <Step n={1} title="Website URL">
               <Label htmlFor="url" className="sr-only">
                 Enter your website URL
               </Label>
               <div className="relative">
-                <Globe className="pointer-events-none absolute left-3.5 top-1/2 size-4 -translate-y-1/2 text-subtle" />
+                <Globe className="pointer-events-none absolute left-5 top-1/2 size-4 -translate-y-1/2 text-subtle" />
                 <Input
                   id="url"
                   type="url"
@@ -103,10 +101,10 @@ export function NewInspectionForm() {
                   }}
                   aria-invalid={Boolean(urlError)}
                   aria-describedby="url-help"
-                  className="pl-10"
+                  className="h-14 pl-12 text-[15px]"
                 />
               </div>
-              <p id="url-help" className={cn("mt-2 text-xs", urlError ? "text-danger" : "text-subtle")}>
+              <p id="url-help" className={cn("mt-2 px-5 text-xs", urlError ? "text-danger" : "text-subtle")}>
                 {urlError ?? "Enter your website URL. Public http(s) sites only — private and internal addresses are blocked."}
               </p>
               <div className="mt-4">
@@ -129,18 +127,18 @@ export function NewInspectionForm() {
                     <label
                       key={c}
                       className={cn(
-                        "flex cursor-pointer gap-3 rounded-xl border p-4 transition-colors",
-                        on ? "border-accent/60 bg-accent-soft/40" : "border-border bg-surface-2 hover:border-border-strong",
+                        "flex cursor-pointer gap-3.5 rounded-3xl border p-5 transition-colors",
+                        on ? "border-ink bg-surface shadow-[0_8px_24px_-16px_rgb(20_16_40/0.35)]" : "border-border bg-surface-2 hover:border-border-strong",
                       )}
                     >
                       <Checkbox checked={on} onCheckedChange={() => toggle(c)} className="mt-0.5" aria-label={d.title} />
                       <div className="min-w-0">
                         <p className="flex items-center gap-2 text-sm font-medium">
-                          <Icon className={cn("size-4", on ? "text-accent" : "text-muted")} /> {d.title}
+                          <Icon className={cn("size-4", on ? "text-ink" : "text-muted")} /> {d.title}
                         </p>
-                        <ul className="mt-2 space-y-0.5 text-xs text-muted">
+                        <ul className="mt-2.5 flex flex-wrap gap-1.5 text-xs text-muted">
                           {d.items.map((i) => (
-                            <li key={i}>· {i}</li>
+                            <li key={i} className={cn("rounded-full px-2.5 py-1", on ? "bg-surface-2" : "bg-surface")}>{i}</li>
                           ))}
                         </ul>
                       </div>
@@ -161,11 +159,11 @@ export function NewInspectionForm() {
                 onChange={(e) => setInstructions(e.target.value)}
                 placeholder="Check whether visitors can successfully navigate from the homepage to the pricing page."
               />
-              <p className="mt-1.5 text-right text-xs text-subtle tabular-nums">{instructions.length}/1000</p>
+              <p className="mt-1.5 px-2 text-right text-xs text-subtle tabular-nums">{instructions.length}/1000</p>
             </Step>
 
             <Step n={4} title="Run">
-              <div className="flex flex-col gap-4 rounded-xl border border-border bg-surface-2 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div className="flex flex-col gap-4 rounded-3xl bg-surface-2 p-5 sm:flex-row sm:items-center sm:justify-between">
                 <p className="flex items-start gap-2 text-xs text-muted">
                   <ShieldCheck className="mt-0.5 size-4 shrink-0 text-accent" />
                   CECH never submits payments, logs in, or deletes data. Forms are only submitted with clearly fake test data.
@@ -178,8 +176,7 @@ export function NewInspectionForm() {
               </div>
               {formError && <p className="mt-3 text-sm text-danger">{formError}</p>}
             </Step>
-          </CardContent>
-        </Card>
+        </div>
       </form>
     </div>
   );

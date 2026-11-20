@@ -19,6 +19,11 @@ export function formatDate(iso: string | null | undefined): string {
   return new Date(iso).toLocaleString(undefined, { month: "short", day: "numeric", hour: "2-digit", minute: "2-digit" });
 }
 
+export function formatDay(iso: string | null | undefined): string {
+  if (!iso) return "—";
+  return new Date(iso).toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
 export function timeAgo(iso: string | null | undefined): string {
   if (!iso) return "—";
   const diff = (Date.now() - Date.parse(iso)) / 1000;

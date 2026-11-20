@@ -28,6 +28,7 @@ The full MVP is implemented: app, API, orchestration, Groq service, Kane worker,
 | Security | SSRF (API, worker, every redirect hop), DNS resolution checks, request validation (Zod), rate limiting, constant-time secret checks, server-only secrets (`server-only`), RLS with no anon access |
 | Settings | Live integration status (Groq, storage, worker, Kane version and auth, SSRF allowlist) |
 | Deployment | `.env.example` files, `worker/Dockerfile`, `docs/DEPLOYMENT.md`, SQL migration |
+| UI redesign (light) | Restyled from the provided reference: white canvas on a lavender frame, slim icon rail, top bar with search pill and black pill CTA, huge-number hero + blurred heat bar (pass rate / health score), divider stat rows with icon chips, list rows with progress rings, segmented toggle, hexagonal "Quality map" flower. Every visual is driven by real data (category pass rates, conclusive rate, fix-verification rate); empty data renders as grey "—" |
 
 ## 🔬 Verification evidence
 
@@ -42,7 +43,7 @@ The full MVP is implemented: app, API, orchestration, Groq service, Kane worker,
 | Live end-to-end (local) | App + worker running. Inspection of `/demo` → probe → plan → worker → **4 real `kane-cli` processes** → callbacks → ERROR(auth) stored with raw NDJSON/stderr → system analysis → finalised `incomplete`, score withheld. Retest created run 2 (parent = run 1) and re-executed through the real worker |
 | SSRF (live) | API rejected 127.0.0.1, 169.254.169.254, `file://`, localhost:8787, `[::1]`, 10.0.0.1, `http://2130706433/`; worker independently returned 422 for 169.254.169.254; unauthenticated worker and callback calls → 401 |
 | Demo site defects (Playwright, fixture check only) | Broken: Pricing → `/demo/about`, CTA stays on `/demo`, no contact confirmation. Healthy: `/demo/pricing`, `/demo/signup`, confirmation shown |
-| UI | Screenshots of every page reviewed; 0 console errors; no horizontal overflow at iPhone 13 width |
+| UI | Redesign reviewed via desktop + iPhone 13 screenshots of every page (empty real data, plus a throwaway synthetic QA database in a scratch dir for populated states — never committed); 0 console/page errors; no horizontal overflow |
 
 ## ⏳ Not yet verified (blocked on credentials, not code)
 

@@ -28,11 +28,11 @@ export function DemoModePanel({ onUseDemo, compact }: { onUseDemo?: (url: string
   }
 
   return (
-    <div className="rounded-xl border border-border bg-surface-2 p-4">
+    <div className="rounded-3xl bg-surface-2 p-5">
       <div className="flex items-start justify-between gap-3">
         <div className="flex gap-3">
-          <span className="flex size-9 shrink-0 items-center justify-center rounded-lg border border-border bg-surface">
-            <FlaskConical className="size-4 text-accent" />
+          <span className="flex size-10 shrink-0 items-center justify-center rounded-full bg-surface">
+            <FlaskConical className="size-4 text-ink" />
           </span>
           <div>
             <p className="text-sm font-medium">Built-in demo website</p>
@@ -47,14 +47,15 @@ export function DemoModePanel({ onUseDemo, compact }: { onUseDemo?: (url: string
       </div>
       <div className="mt-4 flex flex-wrap items-center justify-between gap-3">
         <label className="flex items-center gap-3 text-sm">
-          <span className={mode === "broken" ? "text-danger" : "text-subtle"}>Broken</span>
+          <span className={mode === "broken" ? "font-medium text-danger" : "text-subtle"}>Broken</span>
           <Switch
             checked={mode === "healthy"}
             disabled={!mode || saving}
             onCheckedChange={(v) => setMode(v ? "healthy" : "broken")}
+            className="data-[state=unchecked]:border-danger data-[state=unchecked]:bg-danger"
             aria-label="Toggle demo website mode"
           />
-          <span className={mode === "healthy" ? "text-accent" : "text-subtle"}>Healthy</span>
+          <span className={mode === "healthy" ? "font-medium text-accent" : "text-subtle"}>Healthy</span>
           {saving && <Loader2 className="size-3.5 animate-spin text-muted" />}
         </label>
         <div className="flex gap-2">
@@ -64,7 +65,7 @@ export function DemoModePanel({ onUseDemo, compact }: { onUseDemo?: (url: string
             </a>
           </Button>
           {onUseDemo && (
-            <Button variant="secondary" size="sm" type="button" onClick={() => onUseDemo(`${window.location.origin}/demo`)}>
+            <Button variant="primary" size="sm" type="button" onClick={() => onUseDemo(`${window.location.origin}/demo`)}>
               Use demo website
             </Button>
           )}

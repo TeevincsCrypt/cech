@@ -1,13 +1,14 @@
 "use client";
-import { History, LayoutDashboard, Menu, Plus, Settings, X } from "lucide-react";
+import { BookOpen, FlaskConical, History, LayoutGrid, Menu, Plus, Settings, X } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
-import { Logo } from "@/components/app/logo";
+import { Logo, LogoMark } from "@/components/app/logo";
+import { Tooltip } from "@/components/ui/tooltip";
 import { cn } from "@/lib/utils";
 
 const NAV = [
-  { href: "/dashboard", label: "Overview", icon: LayoutDashboard },
+  { href: "/dashboard", label: "Overview", icon: LayoutGrid },
   { href: "/inspections/new", label: "New Inspection", icon: Plus },
   { href: "/inspections", label: "Inspection History", icon: History },
   { href: "/settings", label: "Settings", icon: Settings },
@@ -18,75 +19,91 @@ function isActive(pathname: string, href: string) {
   return pathname === href;
 }
 
-function NavLinks({ onNavigate }: { onNavigate?: () => void }) {
+/** Slim icon rail (desktop). */
+export function Sidebar() {
   const pathname = usePathname();
   return (
-    <nav className="flex flex-col gap-0.5">
-      {NAV.map(({ href, label, icon: Icon }) => {
-        const active = isActive(pathname, href);
-        return (
-          <Link
-            key={href}
-            href={href}
-            onClick={onNavigate}
-            className={cn(
-              "flex items-center gap-2.5 rounded-lg px-3 py-2 text-sm transition-colors",
-              active ? "bg-surface-3 text-foreground" : "text-muted hover:bg-surface-2 hover:text-foreground",
-            )}
-          >
-            <Icon className={cn("size-4", active && "text-accent")} />
-            {label}
+    <div className="hidden w-[84px] shrink-0 border-r border-border lg:block">
+    <aside className="sticky top-4 flex h-[calc(100vh-2rem)] flex-col items-center justify-between py-7">
+      <div className="flex flex-col items-center gap-14">
+        <Link href="/" aria-label="CECH home">
+          <LogoMark className="size-9" />
+        </Link>
+        <nav className="flex flex-col items-center gap-3" aria-label="App">
+          {NAV.map(({ href, label, icon: Icon }) => {
+            const active = isActive(pathname, href);
+            return (
+              <Tooltip key={href} content={label} side="right">
+                <Link
+                  href={href}
+                  aria-label={label}
+                  aria-current={active ? "page" : undefined}
+                  className={cn(
+                    "flex size-11 items-center justify-center rounded-full transition-colors",
+                    active ? "bg-surface-2 text-ink shadow-[inset_0_0_0_1px_var(--border-strong)]" : "text-subtle hover:bg-surface-2 hover:text-ink",
+                  )}
+                >
+                  <Icon className="size-[19px]" strokeWidth={active ? 2.3 : 2} />
+                </Link>
+              </Tooltip>
+            );
+          })}
+        </nav>
+      </div>
+      <div className="flex flex-col items-center gap-3 border-t border-border pt-6">
+        <Tooltip content="Open demo website" side="right">
+          <a href="/demo" target="_blank" rel="noreferrer" aria-label="Open demo website" className="flex size-11 items-center justify-center rounded-full text-subtle hover:bg-surface-2 hover:text-ink">
+            <FlaskConical className="size-[19px]" />
+          </a>
+        </Tooltip>
+        <Tooltip content="Landing page" side="right">
+          <Link href="/" aria-label="Landing page" className="flex size-11 items-center justify-center rounded-full text-subtle hover:bg-surface-2 hover:text-ink">
+            <BookOpen className="size-[19px]" />
           </Link>
-        );
-      })}
-    </nav>
-  );
-}
-
-function SidebarFooter() {
-  return (
-    <div className="rounded-lg border border-border bg-surface-2 p-3 text-xs text-muted">
-      <p className="font-medium text-foreground">Built-in demo site</p>
-      <p className="mt-1">Inspect a site with switchable healthy/broken behaviour.</p>
-      <Link href="/demo" target="_blank" className="mt-2 inline-block text-accent hover:underline">
-        Open demo website →
-      </Link>
+        </Tooltip>
+      </div>
+    </aside>
     </div>
   );
 }
 
-export function Sidebar() {
+/** Mobile header + drawer. */
+export function MobileNav() {
+  const pathname = usePathname();
   const [open, setOpen] = useState(false);
   return (
     <>
-      <aside className="sticky top-0 hidden h-screen w-60 shrink-0 flex-col justify-between border-r border-border bg-surface px-3 py-5 lg:flex">
-        <div className="space-y-6">
-          <Logo href="/dashboard" className="px-2" />
-          <NavLinks />
-        </div>
-        <SidebarFooter />
-      </aside>
-
-      <header className="sticky top-0 z-40 flex h-14 items-center justify-between border-b border-border bg-surface/95 px-4 backdrop-blur lg:hidden">
+      <header className="sticky top-0 z-40 flex h-16 items-center justify-between border-b border-border bg-surface/95 px-4 backdrop-blur lg:hidden">
         <Logo href="/dashboard" />
-        <button onClick={() => setOpen(true)} className="rounded-md p-2 text-muted hover:bg-surface-2" aria-label="Open navigation">
+        <button onClick={() => setOpen(true)} className="flex size-10 items-center justify-center rounded-full border border-border-strong text-muted" aria-label="Open navigation">
           <Menu className="size-5" />
         </button>
       </header>
       {open && (
         <div className="fixed inset-0 z-50 lg:hidden">
-          <div className="absolute inset-0 bg-black/60" onClick={() => setOpen(false)} />
-          <div className="absolute left-0 top-0 flex h-full w-72 flex-col justify-between border-r border-border bg-surface p-4 animate-fade-in">
-            <div className="space-y-6">
-              <div className="flex items-center justify-between">
-                <Logo href="/dashboard" />
-                <button onClick={() => setOpen(false)} className="rounded-md p-1.5 text-muted hover:bg-surface-2" aria-label="Close navigation">
-                  <X className="size-5" />
-                </button>
-              </div>
-              <NavLinks onNavigate={() => setOpen(false)} />
+          <div className="absolute inset-0 bg-[#1b1a22]/30 backdrop-blur-[2px]" onClick={() => setOpen(false)} />
+          <div className="absolute right-3 top-3 w-[calc(100%-1.5rem)] max-w-sm rounded-3xl bg-surface p-5 shadow-2xl animate-fade-in">
+            <div className="flex items-center justify-between">
+              <Logo href="/dashboard" />
+              <button onClick={() => setOpen(false)} className="flex size-10 items-center justify-center rounded-full border border-border-strong text-muted" aria-label="Close navigation">
+                <X className="size-5" />
+              </button>
             </div>
-            <SidebarFooter />
+            <nav className="mt-6 flex flex-col gap-1">
+              {NAV.map(({ href, label, icon: Icon }) => (
+                <Link
+                  key={href}
+                  href={href}
+                  onClick={() => setOpen(false)}
+                  className={cn("flex items-center gap-3 rounded-2xl px-4 py-3 text-sm", isActive(pathname, href) ? "bg-surface-2 font-medium text-ink" : "text-muted")}
+                >
+                  <Icon className="size-[18px]" /> {label}
+                </Link>
+              ))}
+              <a href="/demo" target="_blank" rel="noreferrer" className="flex items-center gap-3 rounded-2xl px-4 py-3 text-sm text-muted">
+                <FlaskConical className="size-[18px]" /> Demo website
+              </a>
+            </nav>
           </div>
         </div>
       )}

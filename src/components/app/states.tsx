@@ -35,7 +35,7 @@ export function EmptyState({
 }) {
   return (
     <div className="flex flex-col items-center justify-center px-6 py-14 text-center">
-      <div className="mb-4 flex size-11 items-center justify-center rounded-xl border border-border bg-surface-2">
+      <div className="mb-4 flex size-11 items-center justify-center rounded-2xl bg-surface-2">
         <Icon className="size-5 text-muted" />
       </div>
       <p className="text-sm font-medium">{title}</p>
@@ -52,7 +52,7 @@ export function EmptyState({
 export function ErrorState({ message, onRetry }: { message: string; onRetry?: () => void }) {
   return (
     <div className="flex flex-col items-center justify-center px-6 py-12 text-center">
-      <AlertCircle className="mb-3 size-6 text-danger" />
+      <span className="mb-3 flex size-11 items-center justify-center rounded-2xl bg-danger-soft"><AlertCircle className="size-5 text-danger" /></span>
       <p className="text-sm font-medium">Couldn&apos;t load this data</p>
       <p className="mt-1 max-w-md text-sm text-muted">{message}</p>
       {onRetry && (

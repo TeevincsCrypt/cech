@@ -12,7 +12,7 @@ export function Tooltip({ content, children, side = "top" }: { content: React.Re
           <TooltipPrimitive.Content
             side={side}
             sideOffset={6}
-            className={cn("z-50 max-w-xs rounded-md border border-border-strong bg-surface-3 px-2.5 py-1.5 text-xs text-foreground shadow-lg")}
+            className={cn("z-50 max-w-xs rounded-lg bg-ink px-2.5 py-1.5 text-xs text-white shadow-lg")}
           >
             {content}
           </TooltipPrimitive.Content>

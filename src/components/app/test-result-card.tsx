@@ -11,15 +11,15 @@ import { cn, formatDuration } from "@/lib/utils";
 type ReportTest = InspectionReport["tests"][number];
 type ResultWithAnalysis = TestResult & { analysis: AiAnalysis | null };
 
-const BORDER: Record<string, string> = {
-  PASSED: "border-l-accent",
-  FAILED: "border-l-danger",
-  INCONCLUSIVE: "border-l-warning",
-  TIMEOUT: "border-l-warning",
-  ERROR: "border-l-subtle",
-  RUNNING: "border-l-info",
-  QUEUED: "border-l-border-strong",
-  NOT_EXECUTED: "border-l-border-strong",
+const DOT: Record<string, string> = {
+  PASSED: "bg-accent",
+  FAILED: "bg-danger",
+  INCONCLUSIVE: "bg-warning",
+  TIMEOUT: "bg-warning",
+  ERROR: "bg-subtle",
+  RUNNING: "bg-info",
+  QUEUED: "bg-border-strong",
+  NOT_EXECUTED: "bg-border-strong",
 };
 
 const ERROR_KIND_LABEL: Record<string, string> = {
@@ -53,7 +53,7 @@ function Evidence({ value }: { value: string | null }) {
   if (!value) return <span className="text-subtle">No evidence pack reference returned</span>;
   if (/^https:\/\//.test(value)) {
     return (
-      <a href={value} target="_blank" rel="noreferrer noopener" className="inline-flex items-center gap-1 break-all text-accent hover:underline">
+      <a href={value} target="_blank" rel="noreferrer noopener" className="inline-flex items-center gap-1 break-all text-ink underline underline-offset-4">
         Kane test run <ExternalLink className="size-3" />
       </a>
     );
@@ -71,7 +71,7 @@ function ExecutionLog({ result }: { result: TestResult }) {
       </CollapsibleTrigger>
       <CollapsibleContent className="mt-3 space-y-3">
         {result.steps.length > 0 && (
-          <ol className="space-y-1 rounded-lg border border-border bg-background p-3 font-mono text-xs">
+          <ol className="space-y-1 rounded-2xl bg-surface-2 p-4 font-mono text-xs">
             {result.steps.map((s) => (
               <li key={s.step} className="flex gap-2">
                 <span className="w-6 shrink-0 text-right text-subtle">{s.step}</span>
@@ -85,14 +85,14 @@ function ExecutionLog({ result }: { result: TestResult }) {
           <p className="mb-1 text-[11px] uppercase tracking-wider text-subtle">
             Raw stdout (NDJSON){result.exit_code != null && ` · exit code ${result.exit_code}`}
           </p>
-          <pre className="max-h-64 overflow-auto rounded-lg border border-border bg-background p-3 font-mono text-[11px] leading-relaxed text-muted scrollbar-thin">
+          <pre className="max-h-64 overflow-auto rounded-2xl bg-[#16151b] p-4 font-mono text-[11px] leading-relaxed text-[#c9c8d3] scrollbar-thin">
             {result.raw_output?.trim() || "(empty)"}
           </pre>
         </div>
         {result.stderr?.trim() && (
           <div>
             <p className="mb-1 text-[11px] uppercase tracking-wider text-subtle">stderr</p>
-            <pre className="max-h-48 overflow-auto rounded-lg border border-border bg-background p-3 font-mono text-[11px] leading-relaxed text-muted scrollbar-thin">
+            <pre className="max-h-48 overflow-auto rounded-2xl bg-[#16151b] p-4 font-mono text-[11px] leading-relaxed text-[#c9c8d3] scrollbar-thin">
               {result.stderr.trim()}
             </pre>
           </div>
@@ -106,7 +106,7 @@ function ResultBody({ result }: { result: ResultWithAnalysis }) {
   const a = result.analysis;
   const live = result.execution_status === "RUNNING" || result.execution_status === "QUEUED";
   return (
-    <div className="grid gap-5 lg:grid-cols-2">
+    <div className="grid gap-6 lg:grid-cols-2">
       {/* Layer A: real browser execution */}
       <div className="space-y-4">
         <p className="flex items-center gap-1.5 text-xs font-medium text-muted">
@@ -153,7 +153,7 @@ function ResultBody({ result }: { result: ResultWithAnalysis }) {
       </div>
 
       {/* Layer B: AI interpretation */}
-      <div className="space-y-4 lg:border-l lg:border-border lg:pl-5">
+      <div className="space-y-4 lg:border-l lg:border-border lg:pl-6">
         <p className="flex items-center gap-1.5 text-xs font-medium text-muted">
           <Bot className="size-3.5" /> AI interpretation · {a?.source === "groq" ? "Groq" : a?.source === "system" ? "CECH (no AI needed)" : "Groq"}
         </p>
@@ -171,7 +171,7 @@ function ResultBody({ result }: { result: ResultWithAnalysis }) {
             {a.observed_behavior && <Field label="Observed behaviour">{a.observed_behavior}</Field>}
             {a.recommendation && (
               <Field label="Recommended fix">
-                <span className="block rounded-lg border border-border bg-surface-2 p-3">{a.recommendation}</span>
+                <span className="block rounded-2xl bg-surface-2 p-4">{a.recommendation}</span>
               </Field>
             )}
           </>
@@ -189,13 +189,19 @@ export function TestResultCard({ test, runs }: { test: ReportTest; runs: Verific
   const [showPrev, setShowPrev] = useState(false);
 
   return (
-    <article className={cn("rounded-xl border border-l-[3px] border-border bg-surface", BORDER[status], status === "RUNNING" && "shadow-[0_0_0_1px_rgb(106_168_255/0.25)]")}>
-      <header className="flex flex-col gap-3 border-b border-border p-5 sm:flex-row sm:items-start sm:justify-between">
+    <article className={cn("rounded-3xl border border-border bg-surface", status === "RUNNING" && "border-info/40 shadow-[0_0_0_4px_var(--info-soft)]")}>
+      <header className="flex flex-col gap-3 border-b border-border p-6 sm:flex-row sm:items-start sm:justify-between">
         <div className="min-w-0">
-          <h3 className="font-medium leading-snug">{test.title}</h3>
+          <h3 className="flex items-center gap-2.5 text-[16px] font-semibold leading-snug">
+            <span className={cn("size-2.5 shrink-0 rounded-full", DOT[status])} aria-hidden />
+            {test.title}
+          </h3>
           <div className="mt-2 flex flex-wrap items-center gap-2 text-xs">
             <Badge tone="outline">{CATEGORY_LABELS[test.category]}</Badge>
-            <Badge tone={test.priority === "high" ? "red" : test.priority === "medium" ? "yellow" : "grey"}>{test.priority} priority</Badge>
+            <Badge tone="outline">
+              <span className={cn("size-1.5 rounded-full", test.priority === "high" ? "bg-danger" : test.priority === "medium" ? "bg-warning" : "bg-subtle")} />
+              {test.priority} priority
+            </Badge>
             {latest && <span className="text-subtle">Run {runOf(latest)?.sequence ?? "?"}</span>}
             {test.assumption && (
               <span className="text-warning" title={test.assumption}>
@@ -206,7 +212,7 @@ export function TestResultCard({ test, runs }: { test: ReportTest; runs: Verific
         </div>
         <ExecutionBadge status={status} className="self-start" />
       </header>
-      <div className="space-y-5 p-5">
+      <div className="space-y-5 p-6">
         {latest ? <ResultBody result={latest} /> : <p className="text-sm text-muted">Not executed yet.</p>}
         <div className="flex flex-wrap items-center gap-5 border-t border-border pt-4">
           {latest && <ExecutionLog result={latest} />}
@@ -219,7 +225,7 @@ export function TestResultCard({ test, runs }: { test: ReportTest; runs: Verific
         </div>
         {showPrev &&
           previous.map((r) => (
-            <div key={r.id} className="rounded-lg border border-border bg-surface-2/50 p-4">
+            <div key={r.id} className="rounded-3xl bg-surface-2 p-5">
               <div className="mb-4 flex items-center justify-between">
                 <span className="text-xs font-medium text-muted">Run {runOf(r)?.sequence ?? "?"}</span>
                 <ExecutionBadge status={r.execution_status} />

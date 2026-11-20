@@ -1,30 +1,40 @@
 @import "tailwindcss";
+@import "@fontsource-variable/plus-jakarta-sans";
 
-/* CECH design tokens — dark charcoal developer tool, electric green accent. */
+/*
+ * CECH design tokens — light, airy canvas on a soft lavender frame.
+ * Ink-black pill actions, green = verified, warm red = failed,
+ * and a blurred red → amber → green "heat" gradient for health.
+ */
 :root {
-  --background: #0b0c0e;
-  --surface: #111316;
-  --surface-2: #16191d;
-  --surface-3: #1c2025;
-  --border: #23272e;
-  --border-strong: #2f343c;
-  --foreground: #f3f4f6;
-  --muted: #9aa1ab;
-  --subtle: #6b727c;
-  --accent: #3ddc84;
-  --accent-strong: #5cf09c;
-  --accent-soft: rgb(61 220 132 / 0.12);
-  --danger: #f2555a;
-  --danger-soft: rgb(242 85 90 / 0.12);
-  --warning: #f2b640;
-  --warning-soft: rgb(242 182 64 / 0.12);
-  --info: #6aa8ff;
-  --info-soft: rgb(106 168 255 / 0.12);
-  --neutral-soft: rgb(154 161 171 / 0.12);
-  color-scheme: dark;
+  --frame: #e9e5ef;
+  --background: #ffffff;
+  --surface: #ffffff;
+  --surface-2: #f6f5f9;
+  --surface-3: #eeedf3;
+  --border: #ecebf1;
+  --border-strong: #dedce6;
+  --foreground: #111114;
+  --muted: #5f5f6b;
+  --subtle: #9b9aa6;
+  --ink: #111114;
+  --ink-hover: #2a2a31;
+  --accent: #1f9d55;
+  --accent-strong: #178046;
+  --accent-soft: #e6f6ec;
+  --danger: #d64545;
+  --danger-soft: #fdeceb;
+  --warning: #c98a12;
+  --warning-soft: #fdf3dc;
+  --info: #7c6cf0;
+  --info-soft: #efedfd;
+  --neutral-soft: #f1f0f5;
+  --heat: linear-gradient(90deg, #ff8a8a 0%, #ffb27a 28%, #ffd27a 50%, #c9e98a 72%, #8ee08a 100%);
+  color-scheme: light;
 }
 
 @theme inline {
+  --color-frame: var(--frame);
   --color-background: var(--background);
   --color-surface: var(--surface);
   --color-surface-2: var(--surface-2);
@@ -34,6 +44,8 @@
   --color-foreground: var(--foreground);
   --color-muted: var(--muted);
   --color-subtle: var(--subtle);
+  --color-ink: var(--ink);
+  --color-ink-hover: var(--ink-hover);
   --color-accent: var(--accent);
   --color-accent-strong: var(--accent-strong);
   --color-accent-soft: var(--accent-soft);
@@ -44,7 +56,7 @@
   --color-info: var(--info);
   --color-info-soft: var(--info-soft);
   --color-neutral-soft: var(--neutral-soft);
-  --font-sans: var(--font-geist-sans), ui-sans-serif, system-ui, sans-serif;
+  --font-sans: "Plus Jakarta Sans Variable", ui-sans-serif, system-ui, sans-serif;
   --font-mono: var(--font-geist-mono), ui-monospace, SFMono-Regular, monospace;
   --animate-fade-in: fade-in 0.35s ease-out both;
   --animate-pulse-dot: pulse-dot 1.6s ease-in-out infinite;
@@ -72,30 +84,32 @@
 
 html,
 body {
-  background: var(--background);
+  background: var(--frame);
   color: var(--foreground);
 }
 
 body {
   font-family: var(--font-sans);
   -webkit-font-smoothing: antialiased;
-  font-feature-settings: "ss01", "cv11";
 }
 
 ::selection {
-  background: rgb(61 220 132 / 0.3);
+  background: rgb(31 157 85 / 0.18);
 }
 
 :focus-visible {
-  outline: 2px solid var(--accent);
+  outline: 2px solid var(--ink);
   outline-offset: 2px;
 }
 
-.bg-grid {
-  background-image:
-    linear-gradient(to right, rgb(255 255 255 / 0.035) 1px, transparent 1px),
-    linear-gradient(to bottom, rgb(255 255 255 / 0.035) 1px, transparent 1px);
-  background-size: 48px 48px;
+/* Signature heat gradient (health). */
+.bg-heat {
+  background: var(--heat);
+}
+
+.bg-dots {
+  background-image: radial-gradient(rgb(17 17 20 / 0.07) 1px, transparent 1px);
+  background-size: 20px 20px;
 }
 
 .scrollbar-thin {

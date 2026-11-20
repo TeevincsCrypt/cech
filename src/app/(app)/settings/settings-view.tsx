@@ -53,6 +53,7 @@ export function SettingsView() {
       <PageHeader
         title="Settings"
         description="Integration status for this CECH deployment. Secret values are never shown."
+        cta={false}
         actions={
           <Button variant="secondary" onClick={reload}>
             <RefreshCcw /> Re-check
@@ -66,7 +67,7 @@ export function SettingsView() {
           <ErrorState message={error} onRetry={reload} />
         </Card>
       ) : data ? (
-        <div className="grid gap-6 lg:grid-cols-2">
+        <div className="grid gap-5 lg:grid-cols-2">
           <Card>
             <CardHeader>
               <CardTitle className="flex items-center gap-2"><Bot className="size-4 text-muted" /> AI · Groq</CardTitle>
@@ -123,9 +124,9 @@ export function SettingsView() {
               <p>
                 Dev allowlist:{" "}
                 {data.integrations.ssrfAllowlist.length ? (
-                  data.integrations.ssrfAllowlist.map((h) => <code key={h} className="mr-1 rounded bg-surface-3 px-1.5 py-0.5 font-mono text-xs text-warning">{h}</code>)
+                  data.integrations.ssrfAllowlist.map((h) => <code key={h} className="mr-1 rounded-full bg-warning-soft px-2 py-0.5 font-mono text-xs text-warning">{h}</code>)
                 ) : (
-                  <span className="text-accent">empty (production-safe)</span>
+                  <span className="font-medium text-accent">empty (production-safe)</span>
                 )}
               </p>
             </CardContent>

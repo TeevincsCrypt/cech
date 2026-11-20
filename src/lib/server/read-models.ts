@@ -1,6 +1,6 @@
 import "server-only";
 import { getRepository } from "@/lib/store";
-import type { Inspection, VerificationRun } from "@/lib/types";
+import { TEST_CATEGORIES, type Inspection, type TestCategory, type VerificationRun } from "@/lib/types";
 
 export interface InspectionListItem {
   id: string;
@@ -83,14 +83,48 @@ export async function listInspectionSummaries(limit = 50): Promise<InspectionLis
   });
 }
 
+export interface QualityMetrics {
+  /** Pass rate among conclusive (PASSED/FAILED) latest outcomes, per category. */
+  categories: Record<TestCategory, number | null>;
+  /** Share of attempted tests whose latest outcome is a conclusive verdict. */
+  conclusiveRate: number | null;
+  /** Of retested tests that had failed: share now passing. */
+  fixVerificationRate: number | null;
+  resolved: number;
+  recurring: number;
+}
+
+const pct = (num: number, den: number) => (den > 0 ? Math.round((num / den) * 100) : null);
+
 export async function getDashboard() {
   const repo = getRepository();
-  const [stats, recent, runs, inspections] = await Promise.all([
+  const [stats, recent, runs, inspections, summaries] = await Promise.all([
     repo.getStats(),
-    listInspectionSummaries(6),
+    listInspectionSummaries(8),
     repo.listRecentRuns(10),
     repo.listInspections(200),
+    listInspectionSummaries(200),
   ]);
+  const cases = await repo.listTestCasesForInspections(inspections.map((i) => i.id));
+  const categories = Object.fromEntries(
+    TEST_CATEGORIES.map((c) => {
+      const own = cases.filter((x) => x.category === c);
+      const passed = own.filter((x) => x.status === "PASSED").length;
+      const failed = own.filter((x) => x.status === "FAILED").length;
+      return [c, pct(passed, passed + failed)];
+    }),
+  ) as Record<TestCategory, number | null>;
+  const attempted = cases.filter((x) => ["PASSED", "FAILED", "INCONCLUSIVE", "TIMEOUT", "ERROR"].includes(x.status)).length;
+  const conclusive = cases.filter((x) => x.status === "PASSED" || x.status === "FAILED").length;
+  const resolved = summaries.reduce((s, x) => s + x.resolved, 0);
+  const recurring = summaries.reduce((s, x) => s + x.recurring, 0);
+  const quality: QualityMetrics = {
+    categories,
+    conclusiveRate: pct(conclusive, attempted),
+    fixVerificationRate: pct(resolved, resolved + recurring),
+    resolved,
+    recurring,
+  };
   const urlOf = new Map(inspections.map((i) => [i.id, i.website_url]));
   const activity: ActivityItem[] = runs.map((r) => ({
     id: r.id,
@@ -110,5 +144,5 @@ export async function getDashboard() {
     .slice(0, 12)
     .reverse()
     .map((i) => ({ id: i.id, score: i.health_score as number, at: i.created_at, url: i.website_url }));
-  return { stats, recent, activity, trend };
+  return { stats, recent, activity, trend, quality, totalInspections: inspections.length };
 }
