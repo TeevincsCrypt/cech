@@ -23,7 +23,10 @@ export const config = {
   appUrl: process.env.CECH_APP_URL?.trim().replace(/\/+$/, "") || null,
   /** Dev-only SSRF bypass, exact host:port pairs. */
   ssrfAllowlist: parseAllowlist(process.env.SSRF_ALLOWLIST),
-  localDataFile: process.env.CECH_LOCAL_DATA_FILE || ".data/cech-db.json",
+  // Vercel's filesystem is read-only except /tmp. Without Supabase, fall back to
+  // /tmp there: data is ephemeral and per-instance (fine for a quick look only).
+  localDataFile: process.env.CECH_LOCAL_DATA_FILE || (process.env.VERCEL ? "/tmp/cech-db.json" : ".data/cech-db.json"),
+  ephemeralStorage: Boolean(process.env.VERCEL) && !(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY),
 };
 
 export function integrationStatus() {
@@ -33,6 +36,7 @@ export function integrationStatus() {
     supabase: Boolean(config.supabase.url && config.supabase.serviceRoleKey),
     worker: Boolean(config.worker.url && config.worker.secret),
     storage: config.supabase.url && config.supabase.serviceRoleKey ? "supabase" : "local-file",
+    ephemeralStorage: config.ephemeralStorage,
     ssrfAllowlist: config.ssrfAllowlist,
   } as const;
 }

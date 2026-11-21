@@ -9,7 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useApi } from "@/lib/client/use-api";
 
 interface Health {
-  integrations: { groq: boolean; groqModel: string; supabase: boolean; worker: boolean; storage: string; ssrfAllowlist: string[] };
+  integrations: { groq: boolean; groqModel: string; supabase: boolean; worker: boolean; storage: string; ephemeralStorage: boolean; ssrfAllowlist: string[] };
   worker: null | {
     ok?: boolean;
     error?: string;
@@ -89,7 +89,12 @@ export function SettingsView() {
             <CardContent>
               <Row label="Supabase PostgreSQL" ok={data.integrations.supabase}>
                 Active store: <code className="font-mono">{data.integrations.storage}</code>
-                {!data.integrations.supabase && <span className="block">Using a local JSON file (development only).</span>}
+                {!data.integrations.supabase &&
+                  (data.integrations.ephemeralStorage ? (
+                    <span className="block text-warning">Temporary storage in /tmp on this serverless instance. Data can disappear at any time. Add Supabase for persistence.</span>
+                  ) : (
+                    <span className="block">Using a local JSON file (development only).</span>
+                  ))}
               </Row>
             </CardContent>
           </Card>
