@@ -3,6 +3,7 @@
  * a mocked worker transport. Synthetic Kane outcomes here exist ONLY in this
  * test to exercise ingestion/finalisation logic; the product never fabricates them.
  */
+import { createHash } from "node:crypto";
 import { mkdtempSync } from "node:fs";
 import { tmpdir } from "node:os";
 import path from "node:path";
@@ -138,7 +139,7 @@ describe("closed verification loop", () => {
 });
 
 describe("Proof of Fix through the orchestration path", () => {
-  const sha = (b: Uint8Array) => require("node:crypto").createHash("sha256").update(b).digest("hex") as string;
+  const sha = (b: Uint8Array) => createHash("sha256").update(b).digest("hex");
   const withEvidence = (o: ReturnType<typeof outcome>, kinds: string[]) => ({
     ...o,
     evidence: {

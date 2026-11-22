@@ -45,7 +45,7 @@ function Field({ label, children }: { label: string; children: React.ReactNode }
 }
 
 function Evidence({ value }: { value: string | null }) {
-  if (!value) return <span className="text-subtle">No evidence pack reference returned</span>;
+  if (!value) return <span className="text-subtle">Not linked (Kane did not upload this run)</span>;
   if (/^https:\/\//.test(value)) {
     return (
       <a href={value} target="_blank" rel="noreferrer noopener" className="inline-flex items-center gap-1 break-all text-ink underline underline-offset-4">
@@ -153,7 +153,7 @@ function ResultLayers({ result }: { result: ResultWithAnalysis }) {
             )}
             <div className="grid grid-cols-2 gap-4">
               <Field label="Duration">{formatDuration(result.duration_ms)}</Field>
-              <Field label="Evidence">
+              <Field label="Kane test run">
                 <Evidence value={result.kane_test_url ?? result.evidence_reference} />
               </Field>
             </div>

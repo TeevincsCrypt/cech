@@ -1,10 +1,39 @@
 # CECH — Build Status
 
-_Last updated: 2026-11-20_
+_Last updated: 2026-11-22_
 
 ## Summary
 
 The full MVP is implemented: app, API, orchestration, Groq service, Kane worker, Supabase schema, demo site and docs. The pipeline has been run end to end against the **real Kane CLI binary** (v0.10.7). In this build environment, three external credentials were missing and two hosts were blocked by the network policy, so real Kane browser runs could not authenticate and Groq could not be called. Every result produced here is therefore an honest `ERROR (auth)`, not a pass or fail. Completing the final acceptance demo needs the credentials listed below.
+
+## 🧾 Proof of Fix (2026-11-22)
+
+DETECT → CAPTURE → EXPLAIN → FIX → RETEST → VERIFY, built on the existing pipeline with an additive migration (`20261122000000_proof_of_fix.sql`).
+
+### ✅ Fully implemented and verified (in this environment)
+- **Evidence capture:** the worker launches Chrome with kane-cli's own flags, hands Kane `--cdp-endpoint`, and observes the same session. Verified with real Chrome by two integration tests, plus the Quillstack E2E: real screenshots (before / at failure / after / full page), URL before→after, real console errors (the dead CTA's `TypeError`), real failed requests (the contact form's 404), and a capture failure recorded without affecting the result.
+- **Private storage:** artifacts are pulled from the worker over an authenticated route and validated (magic bytes, 4 MB cap, SHA-256 match, strict key pattern), with orphan cleanup on failure. They're served only via `/api/inspections/:id/evidence/:artifactId` after checking the artifact belongs to that inspection (cross-inspection access → 404).
+- **Verification engine:** Verified only for a genuine FAILED followed by an equivalent genuine PASSED. Covered by 17 rule tests: timeout, blocked or error never counts; a different test's result is ignored; a changed expected outcome or start URL is not verified; a verified fix that fails again is Regressed. Records are persisted in `fix_verifications` and marked regressed (kept) on regression.
+- **Exact-replay retest mode:** the identical objective is re-executed, alongside the existing focused mode.
+- **Groq bug reproduction reports:** grounded in an evidence catalogue; unsupported citations and uncited "facts" are removed; evidence sufficiency is enforced. Tested: valid output, invalid JSON, missing fields, rate limits, outages, unsupported claims, insufficient evidence, non-failures.
+- **UI:** Evidence section and overview; Failure / Retest / Successful / Inconclusive evidence labels; screenshot viewer with download; execution details; bug report panel (facts vs hypothesis vs correction); **PROOF OF FIX — VERIFIED** before/after cards; issue states (Open / Resolved / Recurring / Regressed / Verified); exact-replay option; Settings evidence status. Reviewed on desktop and mobile.
+- **Proof of Fix report:** PDF (pdf-lib), Markdown, JSON. Logo, verification reference tied to the DB record, real screenshots, timestamps, and a no-certification statement. 409 unless a fix is genuinely verified.
+- **Migration:** validated on Postgres (PGlite): idempotent re-run, constraints reject traversal / non-image / oversize, private bucket, RLS, cascades.
+- **Degrades safely without the migration:** writes leave out the new columns, and the UI and Settings explain why.
+- **Security fix:** `evidence_reference` no longer leaks the worker's filesystem path (now `kane-session:<id>`).
+- **Demo-site defect found by the E2E:** Quillstack's CTA Suspense fallback was a visually identical but inert "Start your free trial". CECH refused to verify that fix until the placeholder was made invisible.
+- **Tests:** **111 passing**: the original 65 unchanged (one assertion tightened for the path-leak fix) plus 46 new.
+
+### 🟡 Implemented but not tested against production / real Kane
+- **Real Kane driving the evidence browser.** Here, real `kane-cli` 0.10.7 accepted `--cdp-endpoint` and evidence was captured alongside it (`e2e/run-pof-e2e.mjs --real-kane`). But Kane stops at its login check (no TestMu credentials in this sandbox), so it never drove the shared browser. The full loop was proven with a browser-driving Kane test double (see `e2e/README.md`). If Kane can't use the shared browser, the worker automatically falls back to the previous mode and records why.
+- **Real Groq bug reports:** tested with a mocked SDK and a Groq test double; `api.groq.com` is unreachable here.
+- **Supabase Storage upload/download** in a real project (the local store was exercised; the bucket SQL was validated on Postgres).
+- **Worker Docker image** with `playwright-core` (not built here: no Docker).
+
+### ⛔ Not implemented / out of scope
+- Uploading Kane's own sealed evidence pack into CECH. Its presence is recorded and the TestMu test-run link is kept.
+- Per-user ownership checks on evidence. There are no user accounts yet; access is by unguessable inspection and artifact IDs plus an inspection↔artifact check. An `inspection.user_id` check is the documented extension point.
+- Automatic deletion of evidence for deleted inspections in Storage. DB rows cascade; there is no inspection-delete feature yet.
 
 ## ✅ Completed
 

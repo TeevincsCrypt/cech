@@ -33,7 +33,15 @@ export default function DemoHome() {
           Quillstack keeps meeting notes, specs and decisions in one searchable place, so your team always knows what was agreed.
         </p>
         <div className="mt-8 flex flex-col items-center justify-center gap-3 sm:flex-row">
-          <Suspense fallback={<span className={`${ctaClass} opacity-60`}>Start your free trial</span>}>
+          {/* Layout-preserving placeholder: invisible and inert, so nothing labelled
+              "Start your free trial" can be clicked before the real CTA renders. */}
+          <Suspense
+            fallback={
+              <span aria-hidden className={`${ctaClass} invisible`}>
+                Start your free trial
+              </span>
+            }
+          >
             <PrimaryCta />
           </Suspense>
           <Link href="/demo/features" className="inline-flex items-center gap-2 rounded-lg border border-slate-300 px-5 py-3 text-sm font-semibold text-slate-700 hover:bg-slate-50">
