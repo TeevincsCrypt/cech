@@ -60,7 +60,7 @@ function ProductPreview() {
         <div className="flex">
           {/* rail */}
           <div className="hidden w-[72px] shrink-0 flex-col items-center gap-10 border-r border-border py-6 sm:flex" aria-hidden>
-            <LogoMark />
+            <LogoMark className="size-11" />
             <div className="flex flex-col items-center gap-3 text-subtle">
               <span className="flex size-10 items-center justify-center rounded-full bg-surface-2 text-ink shadow-[inset_0_0_0_1px_var(--border-strong)]">
                 <LayoutGrid className="size-[18px]" />
@@ -315,6 +315,7 @@ export default function LandingPage() {
         {/* Final CTA */}
         <section className="relative overflow-hidden rounded-[28px] bg-ink px-6 py-20 text-center text-white sm:px-12">
           <div className="bg-heat pointer-events-none absolute -bottom-24 left-1/2 h-40 w-[80%] -translate-x-1/2 rounded-full opacity-50 blur-3xl" aria-hidden />
+          <LogoMark onDark className="relative mx-auto mb-8 size-24 drop-shadow-[0_12px_30px_rgb(47_191_107/0.35)]" />
           <h2 className="relative text-[34px] font-semibold tracking-tight sm:text-[52px]">Don&apos;t just launch. Prove it works.</h2>
           <p className="relative mx-auto mt-4 max-w-xl text-white/60">Run your first inspection in under a minute, or try it on the built-in demo website.</p>
           <div className="relative mt-9 flex flex-col items-center justify-center gap-3 sm:flex-row">

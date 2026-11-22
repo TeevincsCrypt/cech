@@ -27,7 +27,7 @@ export function Sidebar() {
     <aside className="sticky top-4 flex h-[calc(100vh-2rem)] flex-col items-center justify-between py-7">
       <div className="flex flex-col items-center gap-14">
         <Link href="/" aria-label="CECH home">
-          <LogoMark className="size-9" />
+          <LogoMark className="size-12" />
         </Link>
         <nav className="flex flex-col items-center gap-3" aria-label="App">
           {NAV.map(({ href, label, icon: Icon }) => {

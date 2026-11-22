@@ -1,0 +1,26 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="142 45 500 500">
+  <defs>
+    <linearGradient id="frame" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0" stop-color="#ffffff"/>
+      <stop offset="0.55" stop-color="#cfced8"/>
+      <stop offset="1" stop-color="#f4f4f7"/>
+    </linearGradient>
+    <linearGradient id="crown" x1="0" y1="0" x2="0.6" y2="1">
+      <stop offset="0" stop-color="#7ee6a4"/>
+      <stop offset="0.5" stop-color="#2fbf6b"/>
+      <stop offset="1" stop-color="#1a8a4a"/>
+    </linearGradient>
+    <mask id="gap">
+      <rect x="142" y="45" width="500" height="500" fill="#fff"/>
+      <rect x="470" y="205" width="170" height="170" fill="#000"/>
+    </mask>
+  </defs>
+  <path mask="url(#gap)" fill="url(#frame)" fill-rule="evenodd"
+    d="M200 62 Q392 92 585 62 Q555 295 585 528 Q392 498 200 528 Q230 295 200 62 Z
+       M258 120 Q392 142 527 120 Q500 295 527 470 Q392 448 258 470 Q284 295 258 120 Z"/>
+  <path fill="url(#crown)" fill-rule="evenodd"
+    d="M298 438 C305 380 318 330 316 272 C315 250 316 235 320 222 C330 240 338 255 344 268 L355 238 L387 206 L419 238 L430 268 C437 255 446 240 458 222 C462 236 463 250 462 272 C460 330 474 380 482 438 Q390 428 298 438 Z
+       M387 236 a9 9 0 1 0 0.01 0 Z"/>
+  <path d="M405 324 A18 25 0 1 0 405 366" fill="none" stroke="#ffffff" stroke-width="15" stroke-linecap="round"/>
+  <path fill="#7ee6a4" d="M522 262 Q526 281 545 286 Q526 291 522 310 Q518 291 499 286 Q518 281 522 262 Z"/>
+</svg>

@@ -28,6 +28,7 @@ The full MVP is implemented: app, API, orchestration, Groq service, Kane worker,
 | Security | SSRF (API, worker, every redirect hop), DNS resolution checks, request validation (Zod), rate limiting, constant-time secret checks, server-only secrets (`server-only`), RLS with no anon access |
 | Settings | Live integration status (Groq, storage, worker, Kane version and auth, SSRF allowlist) |
 | Deployment | `.env.example` files, `worker/Dockerfile`, `docs/DEPLOYMENT.md`, SQL migration |
+| Brand / logo | Official mark redrawn as vector from the supplied artwork (C frame + crown + sparkle), recoloured to the site palette: `public/brand/` (SVG + transparent 1024px PNGs, light and on-dark variants), `src/app/icon.svg`, `favicon.ico`, `apple-icon.png` |
 | UI redesign (light) | Restyled from the provided reference: white canvas on a lavender frame, slim icon rail, top bar with search pill and black pill CTA, huge-number hero + blurred heat bar (pass rate / health score), divider stat rows with icon chips, list rows with progress rings, segmented toggle, hexagonal "Quality map" flower. Every visual is driven by real data (category pass rates, conclusive rate, fix-verification rate); empty data renders as grey "—" |
 
 ## 🔬 Verification evidence
