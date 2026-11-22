@@ -1,7 +1,7 @@
 "use client";
 import { ArrowRight, Globe, Loader2, ShieldCheck } from "lucide-react";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
+import { useLayoutEffect, useRef, useState } from "react";
 import { DemoModePanel } from "@/components/app/demo-mode-panel";
 import { PageHeader } from "@/components/app/page-header";
 import { Button } from "@/components/ui/button";
@@ -43,6 +43,24 @@ export function NewInspectionForm() {
   const [urlError, setUrlError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [submitting, setSubmitting] = useState(false);
+  const shouldReset = useRef(false);
+
+  // Next.js keeps visited pages alive (hidden via React <Activity>) instead of
+  // unmounting them. After a successful start we navigate to the report; reset
+  // here so returning to "New inspection" shows a fresh form, not a stuck
+  // "Starting…" button. Unsubmitted drafts are intentionally preserved.
+  useLayoutEffect(() => {
+    return () => {
+      if (!shouldReset.current) return;
+      shouldReset.current = false;
+      setSubmitting(false);
+      setUrl("");
+      setInstructions("");
+      setUrlError(null);
+      setFormError(null);
+      setCategories(["navigation", "forms", "interface", "journey"]);
+    };
+  }, []);
 
   const toggle = (c: TestCategory) => setCategories((cur) => (cur.includes(c) ? cur.filter((x) => x !== c) : [...cur, c]));
 
@@ -70,6 +88,7 @@ export function NewInspectionForm() {
         setSubmitting(false);
         return;
       }
+      shouldReset.current = true;
       router.push(`/inspections/${body.id}`);
     } catch {
       setFormError("Network error — could not reach CECH.");

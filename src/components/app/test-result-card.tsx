@@ -6,6 +6,7 @@ import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
 import type { AiAnalysis, InspectionReport, TestResult, VerificationRun } from "@/lib/types";
 import { CATEGORY_LABELS } from "@/lib/types";
+import { ERROR_KIND_LABEL } from "@/lib/outcome-labels";
 import { cn, formatDuration } from "@/lib/utils";
 
 type ReportTest = InspectionReport["tests"][number];
@@ -22,17 +23,6 @@ const DOT: Record<string, string> = {
   NOT_EXECUTED: "bg-border-strong",
 };
 
-const ERROR_KIND_LABEL: Record<string, string> = {
-  auth: "Kane not authenticated",
-  browser: "Browser failed to start",
-  network: "Network error",
-  worker: "Worker error",
-  url_rejected: "URL rejected by worker",
-  timeout: "Timed out",
-  no_verdict: "No verdict from Kane",
-  blocked_by_site: "Site blocked automation",
-  unknown: "Unknown error",
-};
 
 function SeverityBadge({ severity }: { severity: AiAnalysis["severity"] }) {
   if (!severity || severity === "none") return null;

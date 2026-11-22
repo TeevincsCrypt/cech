@@ -33,6 +33,7 @@ import { Dialog, DialogClose, DialogContent, DialogDescription, DialogTitle } fr
 import { Progress } from "@/components/ui/progress";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useApi } from "@/lib/client/use-api";
+import { nonConclusiveBreakdown } from "@/lib/outcome-labels";
 import { computeHealthScore } from "@/lib/scoring";
 import { TEST_CATEGORIES, type InspectionReport, type TestCategory } from "@/lib/types";
 import { cn, formatDate, formatDuration } from "@/lib/utils";
@@ -132,7 +133,9 @@ export function ReportView({ params }: { params: Promise<{ id: string }> }) {
     const changes = data.tests.map((t) => changeOf(data.runs.map((r) => t.results.find((x) => x.verification_run_id === r.id)?.execution_status ?? null)));
     const resolved = changes.filter((c) => c?.label === "Resolved").length;
     const recurring = changes.filter((c) => c?.label === "Recurring").length;
+    const breakdown = nonConclusiveBreakdown(data.tests.map((t) => t.results.at(-1) ?? null));
     return {
+      breakdown,
       latest,
       score,
       categories: Object.fromEntries(TEST_CATEGORIES.map((c) => [c, cat(c)])) as Record<TestCategory, number | null>,
@@ -246,7 +249,19 @@ export function ReportView({ params }: { params: Promise<{ id: string }> }) {
             {!finished ? (
               <span>Calculated when the run completes</span>
             ) : derived.score.score == null ? (
-              <span className="text-warning">Insufficient data to calculate a reliable health score. {derived.score.reason}</span>
+              <span className="max-w-2xl">
+                <span className="block text-warning">Insufficient data to calculate a reliable health score. {derived.score.reason}</span>
+                {derived.breakdown.length > 0 && (
+                  <span className="mt-2 flex flex-wrap gap-1.5">
+                    {derived.breakdown.map((b) => (
+                      <Badge key={b.key} tone={b.key === "timeout" || b.key === "blocked_by_site" || b.key === "INCONCLUSIVE" ? "yellow" : "grey"}>
+                        {b.count} × {b.label}
+                      </Badge>
+                    ))}
+                  </span>
+                )}
+                {derived.breakdown[0]?.advice && <span className="mt-2 block text-xs text-muted">{derived.breakdown[0].advice}</span>}
+              </span>
             ) : (
               <span>
                 <span className="mr-1.5 text-[22px] font-semibold text-ink">{derived.score.passedWeight}</span>of {derived.score.conclusiveWeight} weighted points passed
