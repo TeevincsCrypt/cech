@@ -1,5 +1,5 @@
 import { spawn } from "node:child_process";
-import { mkdtemp, rm } from "node:fs/promises";
+import { mkdtemp } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { config } from "./config.js";
@@ -9,6 +9,8 @@ const MAX_STDOUT = 400_000;
 const MAX_STDERR = 60_000;
 
 export interface KaneRunOutcome extends ParsedKaneOutput {
+  /** Internal: the run's working directory (for evidence-pack lookup before cleanup). */
+  workdir: string;
   stdout: string;
   stderr: string;
   exitCode: number | null;
@@ -23,10 +25,14 @@ export interface RunOptions {
   timeoutSec: number;
   signal?: AbortSignal;
   onSteps?: (steps: KaneStep[]) => void;
+  /** Every parsed NDJSON event, delivered immediately (used for evidence capture). */
+  onEvent?: (evt: Record<string, unknown>) => void;
+  /** Connect Kane to an existing Chrome (evidence capture) instead of launching its own. */
+  cdpEndpoint?: string;
 }
 
 /** Build the exact argv for kane-cli. User/AI text is a single argv element — never a shell string. */
-export function buildKaneArgs(opts: { objective: string; url: string; timeoutSec: number; chromeProfile: string }): string[] {
+export function buildKaneArgs(opts: { objective: string; url: string; timeoutSec: number; chromeProfile: string; cdpEndpoint?: string }): string[] {
   const args = [
     "run",
     opts.objective,
@@ -39,10 +45,14 @@ export function buildKaneArgs(opts: { objective: string; url: string; timeoutSec
     String(opts.timeoutSec),
     "--max-steps",
     String(config.maxSteps),
-    "--chrome-profile",
-    opts.chromeProfile,
   ];
-  if (config.headless) args.push("--headless");
+  if (opts.cdpEndpoint) {
+    // Kane connects to the worker's evidence browser (it does not own or kill it).
+    args.push("--cdp-endpoint", opts.cdpEndpoint);
+  } else {
+    args.push("--chrome-profile", opts.chromeProfile);
+    if (config.headless) args.push("--headless");
+  }
   return args;
 }
 
@@ -109,7 +119,13 @@ export async function runKane(opts: RunOptions): Promise<KaneRunOutcome> {
       let changed = false;
       for (const l of lines) {
         const evt = parseLine(l);
-        if (evt && applyStep(steps, evt)) changed = true;
+        if (!evt) continue;
+        if (applyStep(steps, evt)) changed = true;
+        try {
+          opts.onEvent?.(evt);
+        } catch {
+          /* observers must never break execution */
+        }
       }
       if (changed && opts.onSteps && Date.now() - lastEmit > 1200) {
         lastEmit = Date.now();
@@ -132,13 +148,12 @@ export async function runKane(opts: RunOptions): Promise<KaneRunOutcome> {
     });
   });
 
-  rm(workdir, { recursive: true, force: true }).catch(() => {});
-
   const cleanStderr = stripAnsi(stderr).slice(-MAX_STDERR);
   const parsed = parseKaneOutput({ stdout, stderr: cleanStderr, exitCode, killedForTimeout, spawnError });
   const completed = Date.now();
   return {
     ...parsed,
+    workdir,
     stdout,
     stderr: cleanStderr,
     exitCode,

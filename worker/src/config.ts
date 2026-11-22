@@ -1,3 +1,5 @@
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { parseAllowlist } from "./url-safety.js";
 
 const num = (v: string | undefined, d: number) => {
@@ -20,6 +22,10 @@ export const config = {
   ssrfAllowlist: parseAllowlist(process.env.SSRF_ALLOWLIST),
   ltUsername: process.env.LT_USERNAME?.trim() || null,
   ltAccessKey: process.env.LT_ACCESS_KEY?.trim() || null,
+  /** Proof of Fix evidence capture (screenshots, URLs, console/network). "off" disables it. */
+  evidence: process.env.KANE_EVIDENCE?.trim().toLowerCase() !== "off",
+  /** Where captured screenshots wait until CECH pulls them (kept with the job, max 24h). */
+  artifactRoot: process.env.KANE_ARTIFACT_DIR?.trim() || path.join(tmpdir(), "cech-artifacts"),
 };
 
 export function assertConfig() {

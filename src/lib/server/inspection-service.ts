@@ -1,19 +1,25 @@
 import "server-only";
 import {
   analyzeTestResult,
+  generateBugReport,
   generateInspectionSummary,
   generateRetestPlan,
   generateTestPlan,
   systemAnalysisForError,
 } from "@/lib/groq/service";
+import { sanitizeEvidence } from "@/lib/evidence-schema";
+import { evaluateIssue } from "@/lib/proof-of-fix";
 import { computeHealthScore, computeOverallStatus } from "@/lib/scoring";
+import { recordFixVerifications, storeEvidenceArtifacts } from "@/lib/server/evidence-service";
 import { probeSite } from "@/lib/server/site-probe";
 import { getWorkerJob, submitWorkerJob, WorkerError, type WorkerTestOutcome } from "@/lib/server/worker-client";
 import { getRepository } from "@/lib/store";
+import { omit } from "@/lib/utils";
 import type { NewResult } from "@/lib/store/types";
 import {
   isTerminal,
   type AiAnalysis,
+  type EvidenceArtifact,
   type Inspection,
   type InspectionReport,
   type RunType,
@@ -126,7 +132,7 @@ async function dispatchRun(
   const r = repo();
   // Pre-create QUEUED rows so progress is visible immediately.
   for (const item of items) {
-    await r.upsertResult(blankResult(run.id, item.test.id, item.objective, item.note));
+    await r.upsertResult(blankResult(run.id, item.test.id, item.objective, item.note, item.test.expected_outcome));
     await r.updateTestCase(item.test.id, { status: "QUEUED" });
   }
 
@@ -167,8 +173,10 @@ async function dispatchRun(
   }
 }
 
-function blankResult(runId: string, testCaseId: string, objective: string, note: string | null): NewResult {
+function blankResult(runId: string, testCaseId: string, objective: string, note: string | null, expectedOutcome: string | null): NewResult {
   return {
+    expected_outcome: expectedOutcome,
+    evidence: null,
     test_case_id: testCaseId,
     verification_run_id: runId,
     objective,
@@ -211,7 +219,7 @@ export async function handleWorkerEvent(event: {
 
   if (event.type === "test_started" || event.type === "test_progress") {
     await r.upsertResult({
-      ...blankResult(run.id, t.testCaseId, existing?.objective ?? t.objective, existing?.objective_note ?? null),
+      ...blankResult(run.id, t.testCaseId, existing?.objective ?? t.objective, existing?.objective_note ?? null, existing?.expected_outcome ?? null),
       execution_status: "RUNNING",
       steps: t.steps ?? [],
       started_at: t.startedAt,
@@ -231,11 +239,14 @@ export async function handleWorkerEvent(event: {
 async function ingestOutcome(run: VerificationRun, t: WorkerTestOutcome): Promise<void> {
   const r = repo();
   const existing = (await r.listResultsForRun(run.id)).find((x) => x.test_case_id === t.testCaseId);
-  const result = await r.upsertResult({
+  const evidence = sanitizeEvidence(t.evidence);
+  let result = await r.upsertResult({
     test_case_id: t.testCaseId,
     verification_run_id: run.id,
     objective: existing?.objective ?? t.objective,
     objective_note: existing?.objective_note ?? null,
+    expected_outcome: existing?.expected_outcome ?? null,
+    evidence,
     execution_status: t.status,
     error_kind: t.errorKind,
     raw_output: t.stdout,
@@ -253,8 +264,25 @@ async function ingestOutcome(run: VerificationRun, t: WorkerTestOutcome): Promis
   await r.updateTestCase(t.testCaseId, { status: t.status });
   log("result_ingested", { runId: run.id, testCaseId: t.testCaseId, status: t.status, errorKind: t.errorKind });
 
+  // Proof of Fix: transfer real screenshots into private storage. Problems are
+  // recorded on the evidence; the Kane outcome above is never touched.
+  if (evidence && evidence.artifacts.length > 0) {
+    try {
+      const stored = await storeEvidenceArtifacts({ inspectionId: run.inspection_id, run, result, evidence });
+      if (stored.capture_errors.length !== evidence.capture_errors.length) {
+        result = await r.upsertResult({ ...stripRow(result), evidence: stored });
+      }
+    } catch (err) {
+      console.error("[evidence] storage failed", err);
+    }
+  }
+
   await analyzeAndStore(run, result);
   await maybeFinalizeRun(run.id);
+}
+
+function stripRow(row: TestResult): NewResult {
+  return omit(row, "id", "created_at");
 }
 
 async function analyzeAndStore(run: VerificationRun, result: TestResult): Promise<void> {
@@ -263,6 +291,13 @@ async function analyzeAndStore(run: VerificationRun, result: TestResult): Promis
   const test = (await r.listTestCases(run.inspection_id)).find((c) => c.id === result.test_case_id);
   if (!inspection || !test) return;
   let analysis;
+  // The bug reproduction report (genuine failures only) runs alongside the analysis.
+  const artifacts =
+    result.execution_status === "FAILED" ? (await r.listArtifactsForInspection(run.inspection_id)).filter((a) => a.test_result_id === result.id) : [];
+  const bugReportPromise = generateBugReport({ url: inspection.website_url, test, result, evidence: result.evidence ?? null, artifacts }).catch((err) => {
+    console.error("[bug-report] failed", err);
+    return { report: null, error: (err as Error).message };
+  });
   try {
     analysis = await analyzeTestResult({ url: inspection.website_url, test, result });
   } catch (err) {
@@ -284,7 +319,8 @@ async function analyzeAndStore(run: VerificationRun, result: TestResult): Promis
             model: null,
           };
   }
-  await r.upsertAnalysis({ ...analysis, test_result_id: result.id });
+  const bug = await bugReportPromise;
+  await r.upsertAnalysis({ ...analysis, bug_report: bug.report, test_result_id: result.id });
 }
 
 // ------------------------------------------------------------------ finalise
@@ -336,10 +372,18 @@ async function finalize(run: VerificationRun, runResults: TestResult[]) {
 
   const score = computeHealthScore(cases.map((c) => ({ priority: c.priority, status: latest.get(c.id)?.execution_status ?? "NOT_EXECUTED" })));
   const everFailed = allResults.some((x) => x.execution_status === "FAILED");
+
+  // Proof of Fix: persist verified/regressed records from real Kane outcomes.
+  await recordFixVerifications(run.inspection_id, cases, allResults, runs);
+  // "verified" overall status requires every test that ever failed to have an
+  // equivalent genuine passing retest (not just any later pass).
+  const ordered = (id: string) => allResults.filter((x) => x.test_case_id === id).sort((a, b) => (seq.get(a.verification_run_id) ?? 0) - (seq.get(b.verification_run_id) ?? 0));
+  const failedEver = cases.filter((c) => allResults.some((x) => x.test_case_id === c.id && x.execution_status === "FAILED"));
+  const allFixesProven = failedEver.length > 0 && failedEver.every((c) => evaluateIssue(c, ordered(c.id)).state === "verified");
   const overall = computeOverallStatus(
     cases.map((c) => latest.get(c.id)?.execution_status ?? "NOT_EXECUTED"),
     everFailed,
-    runs.some((x) => x.run_type !== "initial"),
+    runs.some((x) => x.run_type !== "initial") && allFixesProven,
   );
 
   const summary = await generateInspectionSummary({
@@ -372,6 +416,8 @@ async function finalize(run: VerificationRun, runResults: TestResult[]) {
 
 // ------------------------------------------------------------------ retest
 export class RetestError extends Error {}
+
+export type RetestMode = "focused" | "exact";
 
 export async function createRetest(inspectionId: string, scope: "failed" | "all"): Promise<VerificationRun> {
   const r = repo();
@@ -408,7 +454,7 @@ export async function createRetest(inspectionId: string, scope: "failed" | "all"
 }
 
 /** Background step: Groq writes focused retest objectives from the real previous results, then Kane runs them. */
-export async function planAndDispatchRetest(runId: string): Promise<void> {
+export async function planAndDispatchRetest(runId: string, mode: RetestMode = "focused"): Promise<void> {
   const r = repo();
   const run = await r.getRun(runId);
   if (!run) return;
@@ -427,13 +473,21 @@ export async function planAndDispatchRetest(runId: string): Promise<void> {
     const analyses = await r.listAnalyses([...latestPrev.values()].map((x) => x.id));
     const aFor = new Map(analyses.map((a) => [a.test_result_id, a]));
 
-    const plan = await generateRetestPlan({
-      url: inspection.website_url,
-      items: cases.map((c) => {
-        const res = latestPrev.get(c.id) ?? null;
-        return { test: c, result: res, analysis: res ? (aFor.get(res.id) ?? null) : null };
-      }),
-    });
+    // Exact replay re-runs the ORIGINAL objective verbatim (strongest Proof of Fix);
+    // focused mode lets Groq sharpen the objective from Kane's previous output.
+    const plan =
+      mode === "exact"
+        ? {
+            source: "exact" as const,
+            objectives: new Map(cases.map((c) => [c.id, { objective: c.objective, rationale: "Exact replay of the original objective." }])),
+          }
+        : await generateRetestPlan({
+            url: inspection.website_url,
+            items: cases.map((c) => {
+              const res = latestPrev.get(c.id) ?? null;
+              return { test: c, result: res, analysis: res ? (aFor.get(res.id) ?? null) : null };
+            }),
+          });
     log("retest_planned", { runId, source: plan.source, tests: cases.length });
     await r.updateRun(runId, { status: "dispatching" });
     await r.updateInspection(inspection.id, { status: "dispatching" });
@@ -442,7 +496,11 @@ export async function planAndDispatchRetest(runId: string): Promise<void> {
       { ...run, status: "dispatching" },
       cases.map((c) => {
         const p = plan.objectives.get(c.id)!;
-        return { test: c, objective: p.objective, note: plan.source === "groq" ? p.rationale : "Groq unavailable — previous objective re-run unchanged." };
+        return {
+          test: c,
+          objective: p.objective,
+          note: plan.source === "baseline" ? "Groq unavailable — previous objective re-run unchanged." : p.rationale,
+        };
       }),
     );
   } catch (err) {
@@ -534,6 +592,10 @@ export async function getReport(id: string, opts: { sync?: boolean } = {}): Prom
   const cases = await r.listTestCases(id);
   const results = await r.listResultsForCases(cases.map((c) => c.id));
   const analyses = await r.listAnalyses(results.map((x) => x.id));
+  const evidenceEnabled = await r.evidenceSupported();
+  const artifacts = evidenceEnabled ? await r.listArtifactsForInspection(id) : [];
+  const verifications = evidenceEnabled ? await r.listFixVerifications(id) : [];
+  const artifactsFor = (resultId: string): EvidenceArtifact[] => artifacts.filter((a) => a.test_result_id === resultId);
   const aFor = new Map<string, AiAnalysis>(analyses.map((a) => [a.test_result_id, a]));
   const seq = new Map(runs.map((x) => [x.id, x.sequence]));
 
@@ -545,7 +607,9 @@ export async function getReport(id: string, opts: { sync?: boolean } = {}): Prom
       results: results
         .filter((x) => x.test_case_id === c.id)
         .sort((a, b) => (seq.get(a.verification_run_id) ?? 0) - (seq.get(b.verification_run_id) ?? 0))
-        .map((x) => ({ ...x, analysis: aFor.get(x.id) ?? null })),
+        .map((x) => ({ ...x, analysis: aFor.get(x.id) ?? null, artifacts: artifactsFor(x.id) })),
     })),
+    verifications,
+    evidence_enabled: evidenceEnabled,
   };
 }

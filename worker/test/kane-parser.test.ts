@@ -56,7 +56,9 @@ describe("parseKaneOutput — documented agent-mode events", () => {
     const out = parseKaneOutput({ stdout, stderr: "", exitCode: 1 });
     expect(out.status).toBe("FAILED");
     expect(out.reason).toBe("Assertion failed: URL still /");
-    expect(out.evidenceReference).toBe("worker:/s/1");
+    // Only Kane's session identifier is exposed, never the worker filesystem path.
+    expect(out.evidenceReference).toBe("kane-session:1");
+    expect(out.evidenceReference).not.toContain("/");
   });
 
   it("Kane's synthesised timeout run_end is TIMEOUT, not FAILED", () => {

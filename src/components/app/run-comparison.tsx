@@ -1,6 +1,7 @@
 import { ArrowRight } from "lucide-react";
+import { IssueBadge } from "@/components/app/proof-of-fix";
 import { ExecutionBadge } from "@/components/app/status-badge";
-import { Badge } from "@/components/ui/badge";
+import { evaluateIssue } from "@/lib/proof-of-fix";
 import type { ExecutionStatus, InspectionReport } from "@/lib/types";
 
 const RUN_LABEL = { initial: "Initial", retest_failed: "Retest · failed", retest_all: "Retest · all" } as const;
@@ -32,13 +33,13 @@ export function RunComparison({ report }: { report: InspectionReport }) {
                 <span className="block text-[10px] normal-case tracking-normal text-subtle">{RUN_LABEL[r.run_type]}</span>
               </th>
             ))}
-            <th className="px-5 py-3 font-medium">Change</th>
+            <th className="px-5 py-3 font-medium">Issue status</th>
           </tr>
         </thead>
         <tbody>
           {tests.map((t) => {
             const statuses = runs.map((r) => t.results.find((x) => x.verification_run_id === r.id)?.execution_status ?? null);
-            const change = changeOf(statuses);
+            const issue = evaluateIssue(t, t.results);
             return (
               <tr key={t.id} className="border-b border-border/60 last:border-0">
                 <td className="max-w-[260px] truncate py-3.5 pr-5 font-medium">{t.title}</td>
@@ -47,7 +48,9 @@ export function RunComparison({ report }: { report: InspectionReport }) {
                     {s ? <ExecutionBadge status={s} /> : <span className="flex items-center text-xs text-subtle"><ArrowRight className="mr-1 size-3" />not rerun</span>}
                   </td>
                 ))}
-                <td className="px-5 py-3">{change ? <Badge tone={change.tone}>{change.label}</Badge> : <span className="text-xs text-subtle">—</span>}</td>
+                <td className="px-5 py-3">
+                  <IssueBadge state={issue.state} />
+                </td>
               </tr>
             );
           })}

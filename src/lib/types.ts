@@ -122,6 +122,91 @@ export interface TestResult {
   started_at: string | null;
   completed_at: string | null;
   created_at: string;
+  /** Worker-observed execution evidence (null for results captured before Proof of Fix). */
+  evidence?: ExecutionEvidence | null;
+  /** Expected outcome snapshot at dispatch, for retest equivalence. */
+  expected_outcome?: string | null;
+}
+
+export const ARTIFACT_KINDS = ["before", "at_failure", "after_viewport", "after_fullpage"] as const;
+export type ArtifactKind = (typeof ARTIFACT_KINDS)[number];
+
+export const ARTIFACT_LABELS: Record<ArtifactKind, string> = {
+  before: "Before interaction",
+  at_failure: "At failure",
+  after_viewport: "After execution",
+  after_fullpage: "After execution (full page)",
+};
+
+/**
+ * Facts observed by the Kane worker in the same Chrome session Kane drove.
+ * Every field is only present when the browser actually provided it.
+ */
+export interface ExecutionEvidence {
+  mode: "cdp" | "none";
+  viewport: { width: number; height: number; deviceScaleFactor: number } | null;
+  url_before: string | null;
+  url_after: string | null;
+  console_errors: Array<{ text: string; url: string | null; at: string }>;
+  failed_requests: Array<{ url: string; method: string; status: number | null; error: string | null; at: string }>;
+  /** Problems capturing evidence. Never affects the Kane outcome. */
+  capture_errors: string[];
+  started_at: string | null;
+  completed_at: string | null;
+  /** Artifacts the worker captured (before transfer to CECH storage). */
+  artifacts: Array<{ kind: ArtifactKind; content_type: "image/jpeg" | "image/png"; bytes: number; width: number | null; height: number | null; sha256: string; page_url: string | null; captured_at: string }>;
+  kane_evidence_pack: { sealed: boolean; bytes: number | null } | null;
+}
+
+export interface EvidenceArtifact {
+  id: string;
+  inspection_id: string;
+  test_case_id: string;
+  test_result_id: string;
+  verification_run_id: string;
+  kind: ArtifactKind;
+  storage_key: string;
+  content_type: "image/jpeg" | "image/png";
+  bytes: number;
+  width: number | null;
+  height: number | null;
+  sha256: string;
+  page_url: string | null;
+  captured_at: string;
+  created_at: string;
+}
+
+export interface FixVerification {
+  id: string;
+  inspection_id: string;
+  test_case_id: string;
+  original_result_id: string;
+  retest_result_id: string;
+  equivalence: "exact_objective" | "same_expected_outcome";
+  status: "verified" | "regressed";
+  regressed_result_id: string | null;
+  verified_at: string;
+  regressed_at: string | null;
+  created_at: string;
+}
+
+/** Evidence-grounded bug reproduction report (Groq), for genuine failures only. */
+export interface BugReport {
+  title: string;
+  severity: "critical" | "high" | "medium" | "low";
+  feature: string;
+  description: string;
+  expected_behavior: string;
+  actual_behavior: string;
+  steps_to_reproduce: string[];
+  observed_facts: string[];
+  evidence_refs: string[];
+  hypothesis: string;
+  recommendation: string;
+  retest_objective: string;
+  evidence_sufficient: boolean;
+  /** Claims removed by CECH because they referenced evidence that does not exist. */
+  removed_claims: string[];
 }
 
 export interface AiAnalysis {
@@ -139,6 +224,7 @@ export interface AiAnalysis {
   confidence: Confidence | null;
   model: string | null;
   created_at: string;
+  bug_report?: BugReport | null;
 }
 
 export interface VerificationRun {
@@ -174,9 +260,12 @@ export interface InspectionReport {
   runs: VerificationRun[];
   tests: Array<
     TestCase & {
-      results: Array<TestResult & { analysis: AiAnalysis | null }>;
+      results: Array<TestResult & { analysis: AiAnalysis | null; artifacts: EvidenceArtifact[] }>;
     }
   >;
+  verifications: FixVerification[];
+  /** False when the Proof of Fix migration has not been applied to the database. */
+  evidence_enabled: boolean;
 }
 
 export interface DemoSettings {

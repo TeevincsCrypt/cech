@@ -6,7 +6,7 @@ import { clientIp, rateLimit } from "@/lib/server/rate-limit";
 
 export const maxDuration = 60;
 
-const Body = z.object({ scope: z.enum(["failed", "all"]) });
+const Body = z.object({ scope: z.enum(["failed", "all"]), mode: z.enum(["focused", "exact"]).default("focused") });
 
 export async function POST(req: NextRequest, ctx: RouteContext<"/api/inspections/[id]/retest">) {
   const { id } = await ctx.params;
@@ -19,7 +19,7 @@ export async function POST(req: NextRequest, ctx: RouteContext<"/api/inspections
 
   try {
     const run = await createRetest(id, parsed.data.scope);
-    after(() => planAndDispatchRetest(run.id));
+    after(() => planAndDispatchRetest(run.id, parsed.data.mode));
     return json({ runId: run.id }, 201);
   } catch (err) {
     if (err instanceof RetestError) return error(err.message, 409);

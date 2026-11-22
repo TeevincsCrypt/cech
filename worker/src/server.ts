@@ -1,8 +1,11 @@
 import { createServer, type IncomingMessage, type ServerResponse } from "node:http";
+import { readFile, rm } from "node:fs/promises";
+import path from "node:path";
+import { ARTIFACT_KINDS } from "./evidence.js";
 import { timingSafeEqual } from "node:crypto";
 import { sendCallback } from "./callback.js";
 import { assertConfig, config } from "./config.js";
-import { getJob, onJobEvent, stats, submitJob, type JobTest } from "./jobs.js";
+import { artifactDir, getJob, onJobEvent, stats, submitJob, type JobTest } from "./jobs.js";
 import { runKaneCommand } from "./kane-runner.js";
 import { assertPublicUrl } from "./url-safety.js";
 
@@ -96,6 +99,7 @@ const server = createServer(async (req, res) => {
         service: "cech-kane-worker",
         kane: kaneStatus,
         headless: config.headless,
+        evidence: config.evidence,
         callbacks: Boolean(config.appUrl),
         ...stats(),
       });
@@ -122,6 +126,26 @@ const server = createServer(async (req, res) => {
       }
     }
 
+    // Proof of Fix artifacts: pulled by CECH (authenticated) and stored privately there.
+    const a = url.pathname.match(/^\/jobs\/([A-Za-z0-9_-]{1,64})\/artifacts\/([A-Za-z0-9_-]{1,64})\/([a-z_]{1,32})$/);
+    if (req.method === "GET" && a) {
+      const [, jobId, testCaseId, kind] = a;
+      const job = getJob(jobId);
+      if (!job || !(ARTIFACT_KINDS as readonly string[]).includes(kind) || !job.tests.some((t) => t.testCaseId === testCaseId)) {
+        return send(res, 404, { error: "Artifact not found" });
+      }
+      const dir = artifactDir(jobId, testCaseId);
+      const file = path.resolve(dir, `${kind}.jpg`);
+      if (!file.startsWith(path.resolve(config.artifactRoot) + path.sep)) return send(res, 404, { error: "Artifact not found" });
+      try {
+        const body = await readFile(file);
+        res.writeHead(200, { "content-type": "image/jpeg", "content-length": body.length, "cache-control": "no-store" });
+        return res.end(body);
+      } catch {
+        return send(res, 404, { error: "Artifact not found" });
+      }
+    }
+
     const m = url.pathname.match(/^\/jobs\/([A-Za-z0-9_-]{1,64})$/);
     if (req.method === "GET" && m) {
       const job = getJob(m[1]);
@@ -135,6 +159,8 @@ const server = createServer(async (req, res) => {
   }
 });
 
+// Artifacts from a previous process belong to jobs this process no longer knows.
+await rm(config.artifactRoot, { recursive: true, force: true }).catch(() => {});
 await loginIfConfigured();
 await refreshKaneStatus();
 console.log(`[worker] kane-cli ${kaneStatus.version ?? "NOT FOUND"} authenticated=${kaneStatus.authenticated}`);

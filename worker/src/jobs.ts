@@ -1,4 +1,7 @@
+import { rm } from "node:fs/promises";
+import path from "node:path";
 import { config } from "./config.js";
+import { emptyEvidence, startEvidenceSession, type EvidenceSession, type ExecutionEvidence } from "./evidence.js";
 import { runKane, type KaneRunOutcome } from "./kane-runner.js";
 import type { ExecutionStatus, ErrorKind, KaneStep } from "./kane-parser.js";
 import { assertPublicUrl } from "./url-safety.js";
@@ -25,6 +28,8 @@ export interface TestOutcome {
   cliVersion: string | null;
   startedAt: string | null;
   completedAt: string | null;
+  /** Proof of Fix: worker-observed evidence from the same browser Kane drove. */
+  evidence: ExecutionEvidence | null;
 }
 
 export interface Job {
@@ -79,7 +84,13 @@ function emptyOutcome(t: JobTest): TestOutcome {
     cliVersion: null,
     startedAt: null,
     completedAt: null,
+    evidence: null,
   };
+}
+
+/** Directory holding one test's captured artifacts (ids are validated at the API). */
+export function artifactDir(jobId: string, testCaseId: string): string {
+  return path.join(config.artifactRoot, jobId, testCaseId);
 }
 
 export function submitJob(id: string, url: string, tests: JobTest[]): Job {
@@ -157,28 +168,71 @@ async function execute(job: Job, test: TestOutcome, signal: AbortSignal) {
     return;
   }
 
-  let outcome: KaneRunOutcome;
-  try {
-    outcome = await runKane({
+  // Proof of Fix: open an evidence session on a Chrome the worker controls and
+  // capture the page before Kane acts. Failure here never blocks the test.
+  let session: EvidenceSession | null = null;
+  const captureErrors: string[] = [];
+  if (config.evidence) {
+    try {
+      session = await startEvidenceSession({ artifactDir: artifactDir(job.id, test.testCaseId), headless: config.headless });
+      await session.captureBefore(safe.normalized);
+    } catch (err) {
+      captureErrors.push(`Evidence capture unavailable: ${(err as Error).message.split("\n")[0]}`);
+      await session?.close();
+      session = null;
+    }
+  }
+
+  const run = (s: EvidenceSession | null) =>
+    runKane({
       objective: test.objective,
       url: safe.normalized,
       timeoutSec: config.testTimeoutSec,
       signal,
+      cdpEndpoint: s?.cdpEndpoint,
       onSteps: (steps) => {
         test.steps = steps;
         listener({ type: "test_progress", job, test });
       },
+      onEvent: (evt) => {
+        if (!s) return;
+        if (typeof evt.step === "number" && evt.status === "failed") s.captureFailure();
+        if (evt.type === "run_end") s.captureAfter();
+      },
     });
+
+  let outcome: KaneRunOutcome;
+  let evidence: ExecutionEvidence;
+  try {
+    outcome = await run(session);
+    // Safety net: if Kane could not drive the evidence browser at all, re-run it
+    // exactly as before (Kane launches its own Chrome) and record why.
+    if (session && outcome.status === "ERROR" && outcome.errorKind === "browser" && outcome.steps.length === 0) {
+      captureErrors.push(`Kane could not use the evidence browser (${outcome.reason ?? "browser error"}); re-ran without evidence capture.`);
+      await session.close();
+      session = null;
+      await rm(outcome.workdir, { recursive: true, force: true }).catch(() => {});
+      outcome = await run(null);
+    }
+    const packDirs = [path.join(outcome.workdir, ".testmuai"), outcome.sessionDir ?? ""];
+    evidence = session ? await session.finish(outcome.status, packDirs) : emptyEvidence();
+    evidence.capture_errors.unshift(...captureErrors);
   } catch (err) {
-    settle(job, test, { status: "ERROR", errorKind: "worker", reason: `Worker error: ${(err as Error).message}` });
+    await session?.close();
+    settle(job, test, { status: "ERROR", errorKind: "worker", reason: `Worker error: ${(err as Error).message}`, evidence: emptyEvidence(captureErrors) });
     return;
   }
+  await session?.close();
+  rm(outcome.workdir, { recursive: true, force: true }).catch(() => {});
+
   console.log(
     JSON.stringify({
       evt: "kane_run",
       job: job.id,
       test: test.testCaseId,
       status: outcome.status,
+      evidence: evidence.artifacts.map((a) => a.kind),
+      captureErrors: evidence.capture_errors.length,
       errorKind: outcome.errorKind,
       exit: outcome.exitCode,
       ms: outcome.durationMs,
@@ -200,12 +254,16 @@ async function execute(job: Job, test: TestOutcome, signal: AbortSignal) {
     cliVersion: outcome.cliVersion,
     startedAt: outcome.startedAt,
     completedAt: outcome.completedAt,
+    evidence,
   });
 }
 
 function pruneOldJobs() {
   const cutoff = Date.now() - 24 * 3600 * 1000;
   for (const [id, j] of jobs) {
-    if (j.status === "completed" && j.completedAt && Date.parse(j.completedAt) < cutoff) jobs.delete(id);
+    if (j.status === "completed" && j.completedAt && Date.parse(j.completedAt) < cutoff) {
+      jobs.delete(id);
+      rm(path.join(config.artifactRoot, id), { recursive: true, force: true }).catch(() => {});
+    }
   }
 }

@@ -67,6 +67,8 @@ export interface ParsedKaneOutput {
   evidenceReference: string | null;
   cliVersion: string | null;
   unparsedLines: number;
+  /** Internal only (never sent to CECH): Kane's session directory on the worker. */
+  sessionDir: string | null;
 }
 
 export interface ParseInput {
@@ -115,6 +117,10 @@ export function applyStep(steps: KaneStep[], evt: Record<string, unknown>): bool
   return true;
 }
 
+function baseName(p: string): string {
+  return p.replace(/[\\/]+$/, "").split(/[\\/]/).pop() ?? p;
+}
+
 function str(v: unknown): string | null {
   return typeof v === "string" && v.trim() ? v.trim() : null;
 }
@@ -155,13 +161,15 @@ export function parseKaneOutput(input: ParseInput): ParsedKaneOutput {
   const summary = runEnd ? (str(runEnd.summary) ?? str(runEnd.one_liner)) : null;
   const reason = runEnd ? str(runEnd.reason) : (errors[0] ?? null);
   const testUrl = runEnd ? str(runEnd.test_url) : null;
+  // Never expose worker filesystem paths: keep only Kane's session/pack identifier.
+  const sessionDir = runEnd ? str(runEnd.session_dir) : null;
+  const packPath = str(runEnd?.evidence_path) ?? evidencePath;
   const evidenceReference =
     testUrl ??
-    str(runEnd?.evidence_path) ??
-    evidencePath ??
-    (runEnd && str(runEnd.session_dir) ? `worker:${str(runEnd.session_dir)}` : null);
+    (packPath ? `kane-evidence:${baseName(packPath)}` : null) ??
+    (sessionDir ? `kane-session:${baseName(sessionDir)}` : null);
 
-  const base = { steps, runEnd, errors, summary, reason, testUrl, evidenceReference, cliVersion, unparsedLines };
+  const base = { steps, runEnd, errors, summary, reason, testUrl, evidenceReference, cliVersion, unparsedLines, sessionDir };
 
   if (input.spawnError) {
     return { ...base, status: "ERROR", errorKind: "worker", reason: input.spawnError };

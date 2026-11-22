@@ -1,16 +1,21 @@
 "use client";
 import { Bot, ChevronDown, ExternalLink, Globe2, Terminal } from "lucide-react";
 import { useState } from "react";
+import { BugReportPanel } from "@/components/app/bug-report-panel";
+import { EvidencePanel } from "@/components/app/evidence-viewer";
+import { IssueBadge } from "@/components/app/proof-of-fix";
 import { ExecutionBadge } from "@/components/app/status-badge";
 import { Badge } from "@/components/ui/badge";
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from "@/components/ui/collapsible";
-import type { AiAnalysis, InspectionReport, TestResult, VerificationRun } from "@/lib/types";
+import { evaluateIssue } from "@/lib/proof-of-fix";
+import type { AiAnalysis, EvidenceArtifact, InspectionReport, TestResult, VerificationRun } from "@/lib/types";
 import { CATEGORY_LABELS } from "@/lib/types";
 import { ERROR_KIND_LABEL } from "@/lib/outcome-labels";
 import { cn, formatDuration } from "@/lib/utils";
 
 type ReportTest = InspectionReport["tests"][number];
-type ResultWithAnalysis = TestResult & { analysis: AiAnalysis | null };
+type ResultWithAnalysis = TestResult & { analysis: AiAnalysis | null; artifacts: EvidenceArtifact[] };
+type EvidenceCtx = { inspectionId: string; evidenceEnabled: boolean };
 
 const DOT: Record<string, string> = {
   PASSED: "bg-accent",
@@ -92,7 +97,21 @@ function ExecutionLog({ result }: { result: TestResult }) {
   );
 }
 
-function ResultBody({ result }: { result: ResultWithAnalysis }) {
+function ResultBody({ result, ctx, isRetestOfFailure }: { result: ResultWithAnalysis; ctx: EvidenceCtx; isRetestOfFailure: boolean }) {
+  const bug = result.analysis?.bug_report ?? null;
+  return (
+    <div className="space-y-5">
+      <ResultLayers result={result} />
+      <EvidencePanel inspectionId={ctx.inspectionId} result={result} artifacts={result.artifacts} isRetestOfFailure={isRetestOfFailure} evidenceEnabled={ctx.evidenceEnabled} />
+      {result.execution_status === "FAILED" && bug && <BugReportPanel report={bug} />}
+      {result.execution_status === "FAILED" && !bug && result.analysis && (
+        <p className="text-xs text-subtle">No bug reproduction report is available for this failure (Groq was unavailable or returned no valid report). The Kane outcome and evidence above are unaffected.</p>
+      )}
+    </div>
+  );
+}
+
+function ResultLayers({ result }: { result: ResultWithAnalysis }) {
   const a = result.analysis;
   const live = result.execution_status === "RUNNING" || result.execution_status === "QUEUED";
   return (
@@ -171,7 +190,12 @@ function ResultBody({ result }: { result: ResultWithAnalysis }) {
   );
 }
 
-export function TestResultCard({ test, runs }: { test: ReportTest; runs: VerificationRun[] }) {
+export function TestResultCard({ test, runs, inspectionId, evidenceEnabled }: { test: ReportTest; runs: VerificationRun[]; inspectionId: string; evidenceEnabled: boolean }) {
+  const ctx = { inspectionId, evidenceEnabled };
+  const issue = evaluateIssue(test, test.results);
+  // A PASSED result is "retest evidence" when an earlier genuine failure exists for this test.
+  const isRetestOfFailure = (r: TestResult) =>
+    r.execution_status === "PASSED" && test.results.slice(0, test.results.indexOf(r as ResultWithAnalysis)).some((x) => x.execution_status === "FAILED");
   const latest = test.results.at(-1) ?? null;
   const previous = test.results.slice(0, -1).reverse();
   const status = latest?.execution_status ?? "NOT_EXECUTED";
@@ -200,10 +224,16 @@ export function TestResultCard({ test, runs }: { test: ReportTest; runs: Verific
             )}
           </div>
         </div>
-        <ExecutionBadge status={status} className="self-start" />
+        <div className="flex flex-wrap items-center gap-2 self-start">
+          {["open", "recurring", "regressed", "resolved", "verified"].includes(issue.state) && <IssueBadge state={issue.state} />}
+          <ExecutionBadge status={status} />
+        </div>
       </header>
       <div className="space-y-5 p-6">
-        {latest ? <ResultBody result={latest} /> : <p className="text-sm text-muted">Not executed yet.</p>}
+        {issue.state === "resolved" && issue.notVerifiedReason && (
+          <p className="rounded-2xl bg-warning-soft px-4 py-3 text-xs text-warning">Passed after failing, but not counted as Proof of Fix: {issue.notVerifiedReason}</p>
+        )}
+        {latest ? <ResultBody result={latest} ctx={ctx} isRetestOfFailure={isRetestOfFailure(latest)} /> : <p className="text-sm text-muted">Not executed yet.</p>}
         <div className="flex flex-wrap items-center gap-5 border-t border-border pt-4">
           {latest && <ExecutionLog result={latest} />}
           {previous.length > 0 && (
@@ -220,7 +250,7 @@ export function TestResultCard({ test, runs }: { test: ReportTest; runs: Verific
                 <span className="text-xs font-medium text-muted">Run {runOf(r)?.sequence ?? "?"}</span>
                 <ExecutionBadge status={r.execution_status} />
               </div>
-              <ResultBody result={r} />
+              <ResultBody result={r} ctx={ctx} isRetestOfFailure={isRetestOfFailure(r)} />
               <div className="mt-4">
                 <ExecutionLog result={r} />
               </div>

@@ -3,11 +3,14 @@ import { createClient, type SupabaseClient } from "@supabase/supabase-js";
 import type {
   AiAnalysis,
   DemoSettings,
+  EvidenceArtifact,
+  FixVerification,
   Inspection,
   TestCase,
   TestResult,
   VerificationRun,
 } from "@/lib/types";
+import { omit } from "@/lib/utils";
 import type { DashboardStats, Repository } from "./types";
 
 /**
@@ -25,6 +28,25 @@ export class SupabaseRepository implements Repository {
       auth: { persistSession: false, autoRefreshToken: false },
       global: { fetch: (input, init) => fetch(input, { ...init, cache: "no-store" }) },
     });
+  }
+
+  private evidenceColumns: Promise<boolean> | null = null;
+
+  /**
+   * Detect (once) whether the Proof of Fix migration has been applied, so new
+   * code can run against an old schema without failing core writes.
+   */
+  evidenceSupported(): Promise<boolean> {
+    this.evidenceColumns ??= (async () => {
+      const [a, b] = await Promise.all([
+        this.db.from("test_results").select("evidence, expected_outcome").limit(1),
+        this.db.from("evidence_artifacts").select("id").limit(1),
+      ]);
+      const ok = !a.error && !b.error;
+      if (!ok) console.warn("[supabase] Proof of Fix migration not applied — evidence will not be stored", a.error?.message ?? b.error?.message);
+      return ok;
+    })().catch(() => false);
+    return this.evidenceColumns;
   }
 
   private check<T>(res: { data: T | null; error: { message: string } | null }, what: string): T {
@@ -98,7 +120,11 @@ export class SupabaseRepository implements Repository {
     return rows.length > 0;
   }
 
-  async upsertResult(result: Parameters<Repository["upsertResult"]>[0]) {
+  async upsertResult(input: Parameters<Repository["upsertResult"]>[0]) {
+    let result: Record<string, unknown> = input;
+    if (!(await this.evidenceSupported())) {
+      result = omit(input, "evidence", "expected_outcome");
+    }
     return this.check(
       await this.db
         .from("test_results")
@@ -116,7 +142,11 @@ export class SupabaseRepository implements Repository {
     return this.check(await this.db.from("test_results").select().in("test_case_id", ids), "listResultsForCases") as TestResult[];
   }
 
-  async upsertAnalysis(analysis: Parameters<Repository["upsertAnalysis"]>[0]) {
+  async upsertAnalysis(input: Parameters<Repository["upsertAnalysis"]>[0]) {
+    let analysis: Record<string, unknown> = input;
+    if (!(await this.evidenceSupported())) {
+      analysis = omit(input, "bug_report");
+    }
     return this.check(
       await this.db.from("ai_analyses").upsert(analysis, { onConflict: "test_result_id" }).select().single(),
       "upsertAnalysis",
@@ -145,6 +175,35 @@ export class SupabaseRepository implements Repository {
       count(() => this.db.from("test_results").select("id", { count: "exact", head: true }).eq("execution_status", "FAILED")),
     ]);
     return { totalInspections, totalTestsExecuted, testsPassed, issuesDetected };
+  }
+
+  async upsertArtifact(a: Parameters<Repository["upsertArtifact"]>[0]) {
+    return this.check(
+      await this.db.from("evidence_artifacts").upsert(a, { onConflict: "test_result_id,kind" }).select().single(),
+      "upsertArtifact",
+    ) as EvidenceArtifact;
+  }
+  async getArtifact(id: string) {
+    return this.check(await this.db.from("evidence_artifacts").select().eq("id", id).maybeSingle(), "getArtifact") as EvidenceArtifact | null;
+  }
+  async listArtifactsForInspection(inspectionId: string) {
+    if (!(await this.evidenceSupported())) return [];
+    return this.check(await this.db.from("evidence_artifacts").select().eq("inspection_id", inspectionId), "listArtifacts") as EvidenceArtifact[];
+  }
+  async upsertFixVerification(v: Parameters<Repository["upsertFixVerification"]>[0]) {
+    return this.check(
+      await this.db.from("fix_verifications").upsert(v, { onConflict: "original_result_id,retest_result_id" }).select().single(),
+      "upsertFixVerification",
+    ) as FixVerification;
+  }
+  async listFixVerifications(inspectionId: string) {
+    if (!(await this.evidenceSupported())) return [];
+    return this.check(await this.db.from("fix_verifications").select().eq("inspection_id", inspectionId), "listFixVerifications") as FixVerification[];
+  }
+
+  /** Server-side access to the private evidence bucket. */
+  get storage() {
+    return this.db.storage;
   }
 
   async getDemoSettings(): Promise<DemoSettings> {

@@ -3,6 +3,9 @@ import type { SiteProbe } from "@/lib/server/site-probe";
 import { describeProbe } from "@/lib/server/site-probe";
 import type {
   AiAnalysis,
+  BugReport,
+  EvidenceArtifact,
+  ExecutionEvidence,
   ExecutionStatus,
   InspectionSummary,
   TestCase,
@@ -13,12 +16,16 @@ import { baselinePlan } from "./baseline";
 import { callStructured, GroqUnavailableError } from "./client";
 import {
   analystSystemPrompt,
+  bugReportSystemPrompt,
   plannerSystemPrompt,
   plannerUserPrompt,
   retestSystemPrompt,
   summarySystemPrompt,
 } from "./prompts";
 import {
+  BugReportJsonSchema,
+  BugReportSchema,
+  type BugReportOutput,
   AnalysisJsonSchema,
   AnalysisSchema,
   RetestPlanJsonSchema,
@@ -322,5 +329,103 @@ export async function generateInspectionSummary(input: {
   } catch (err) {
     if (!(err instanceof GroqUnavailableError)) throw err;
     return fallback(err.message);
+  }
+}
+
+
+// ---------------------------------------------------------------- 5. Bug reproduction report
+/**
+ * Build the evidence list Groq may cite. Every id maps to something the worker
+ * or Kane actually produced; nothing else may be referenced.
+ */
+export function buildEvidenceCatalog(result: TestResult, evidence: ExecutionEvidence | null, artifacts: Pick<EvidenceArtifact, "kind" | "page_url" | "captured_at">[]) {
+  const items: Array<{ id: string; text: string }> = [];
+  if (result.kane_summary) items.push({ id: "kane:summary", text: `Kane summary: ${result.kane_summary}` });
+  if (result.kane_reason) items.push({ id: "kane:reason", text: `Kane termination reason: ${result.kane_reason}` });
+  const steps = result.steps.filter((s) => s.status !== "running");
+  if (steps.length) items.push({ id: "kane:steps", text: `Kane step log:\n${steps.slice(-20).map((s) => `  step ${s.step} [${s.status}]: ${s.remark}`).join("\n")}` });
+  if (evidence?.url_before) items.push({ id: "url:before", text: `Browser URL before Kane acted: ${evidence.url_before}` });
+  if (evidence?.url_after) items.push({ id: "url:after", text: `Browser URL after Kane finished: ${evidence.url_after}` });
+  if (evidence?.viewport) items.push({ id: "viewport", text: `Viewport: ${evidence.viewport.width}x${evidence.viewport.height}` });
+  for (const a of artifacts) items.push({ id: `screenshot:${a.kind}`, text: `Screenshot (${a.kind}) of ${a.page_url ?? "unknown URL"} at ${a.captured_at}` });
+  evidence?.console_errors.forEach((c, i) => items.push({ id: `console:${i + 1}`, text: `Browser console error: ${c.text}${c.url ? ` (${c.url})` : ""}` }));
+  evidence?.failed_requests.forEach((r, i) =>
+    items.push({ id: `network:${i + 1}`, text: `Failed request: ${r.method} ${r.url} → ${r.status ?? r.error ?? "failed"}` }),
+  );
+  return items;
+}
+
+/** Remove any citation of evidence that does not exist; never trust the model's ids. */
+export function enforceEvidenceGrounding(data: BugReportOutput, allowedIds: Set<string>, url: string): BugReport {
+  const removed: string[] = [];
+  const evidence_refs = data.evidence_refs.filter((r) => {
+    const ok = allowedIds.has(r.trim());
+    if (!ok) removed.push(`Reference to non-existent evidence "${r}"`);
+    return ok;
+  });
+  const observed_facts = data.observed_facts.filter((f) => {
+    const cited = [...f.matchAll(/\[([^\]]+)\]/g)].flatMap((m) => m[1].split(/[,\s]+/)).filter(Boolean);
+    if (cited.length === 0) {
+      removed.push(`Uncited "fact": ${f}`);
+      return false;
+    }
+    const bad = cited.filter((c) => !allowedIds.has(c));
+    if (bad.length) {
+      removed.push(`Fact citing non-existent evidence (${bad.join(", ")}): ${f}`);
+      return false;
+    }
+    return true;
+  });
+  const hasBrowserEvidence = [...allowedIds].some((id) => id.startsWith("screenshot:") || id.startsWith("url:") || id === "kane:steps");
+  return {
+    ...data,
+    evidence_refs,
+    observed_facts,
+    retest_objective: sanitizeObjective(data.retest_objective, url),
+    // The model can't declare evidence sufficient when no browser evidence exists.
+    evidence_sufficient: data.evidence_sufficient && hasBrowserEvidence && observed_facts.length > 0,
+    removed_claims: removed,
+  };
+}
+
+/**
+ * Evidence-grounded bug reproduction report for a GENUINE failure only.
+ * Returns null (never a fabricated report) when the test did not fail or
+ * Groq is unavailable.
+ */
+export async function generateBugReport(input: {
+  url: string;
+  test: Pick<TestCase, "category" | "title" | "priority" | "expected_outcome">;
+  result: TestResult;
+  evidence: ExecutionEvidence | null;
+  artifacts: Pick<EvidenceArtifact, "kind" | "page_url" | "captured_at">[];
+}): Promise<{ report: BugReport | null; error: string | null }> {
+  if (input.result.execution_status !== "FAILED") return { report: null, error: null };
+  const catalog = buildEvidenceCatalog(input.result, input.evidence, input.artifacts);
+  const allowed = new Set(catalog.map((c) => c.id));
+  const payload = `Website (start URL): ${input.url}
+Test: ${input.test.title} (${input.test.category}, ${input.test.priority} priority)
+Objective Kane executed: ${input.result.objective}
+Expected outcome: ${input.test.expected_outcome}
+Kane browser outcome: FAILED (ground truth)
+
+<evidence untrusted="true">
+${catalog.map((c) => `[${c.id}] ${c.text}`).join("\n") || "(no evidence captured)"}
+</evidence>`;
+  try {
+    const { data } = await callStructured({
+      name: "bug_report",
+      jsonSchema: BugReportJsonSchema,
+      schema: BugReportSchema,
+      maxTokens: 1800,
+      messages: [
+        { role: "system", content: bugReportSystemPrompt() },
+        { role: "user", content: payload },
+      ],
+    });
+    return { report: enforceEvidenceGrounding(data, allowed, input.url), error: null };
+  } catch (err) {
+    if (!(err instanceof GroqUnavailableError)) throw err;
+    return { report: null, error: err.message };
   }
 }

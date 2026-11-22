@@ -1,6 +1,7 @@
 "use client";
 import {
   AlertTriangle,
+  Camera,
   Bot,
   CheckCircle2,
   ChevronDown,
@@ -22,7 +23,8 @@ import { CategoryFlower } from "@/components/app/category-flower";
 import { DemoModePanel } from "@/components/app/demo-mode-panel";
 import { HeatBar } from "@/components/app/heat-bar";
 import { PageHeader } from "@/components/app/page-header";
-import { RunComparison, changeOf } from "@/components/app/run-comparison";
+import { ProofOfFixCard } from "@/components/app/proof-of-fix";
+import { RunComparison } from "@/components/app/run-comparison";
 import { StatRow } from "@/components/app/stat-row";
 import { OverallBadge } from "@/components/app/status-badge";
 import { ErrorState, LoadingState } from "@/components/app/states";
@@ -34,6 +36,8 @@ import { Progress } from "@/components/ui/progress";
 import { Tooltip } from "@/components/ui/tooltip";
 import { useApi } from "@/lib/client/use-api";
 import { nonConclusiveBreakdown } from "@/lib/outcome-labels";
+import { evaluateIssue } from "@/lib/proof-of-fix";
+import { Checkbox } from "@/components/ui/checkbox";
 import { computeHealthScore } from "@/lib/scoring";
 import { TEST_CATEGORIES, type InspectionReport, type TestCategory } from "@/lib/types";
 import { cn, formatDate, formatDuration } from "@/lib/utils";
@@ -117,6 +121,7 @@ export function ReportView({ params }: { params: Promise<{ id: string }> }) {
   const [retestOpen, setRetestOpen] = useState<null | "failed" | "all">(null);
   const [retesting, setRetesting] = useState(false);
   const [retestError, setRetestError] = useState<string | null>(null);
+  const [exactReplay, setExactReplay] = useState(false);
 
   const derived = useMemo(() => {
     if (!data) return null;
@@ -130,9 +135,30 @@ export function ReportView({ params }: { params: Promise<{ id: string }> }) {
     };
     const attempted = latest.filter((s) => TERMINAL.includes(s)).length;
     const conclusive = latest.filter((s) => s === "PASSED" || s === "FAILED").length;
-    const changes = data.tests.map((t) => changeOf(data.runs.map((r) => t.results.find((x) => x.verification_run_id === r.id)?.execution_status ?? null)));
-    const resolved = changes.filter((c) => c?.label === "Resolved").length;
-    const recurring = changes.filter((c) => c?.label === "Recurring").length;
+    // Issue states come from the Proof of Fix engine (real Kane outcomes only).
+    const issues = data.tests.map((t) => ({ test: t, issue: evaluateIssue(t, t.results) }));
+    const count = (st: string) => issues.filter((x) => x.issue.state === st).length;
+    const verified = count("verified");
+    const fixAttempts = verified + count("recurring") + count("regressed") + count("resolved");
+    const latestWithEvidence = data.tests.filter((t) => (t.results.at(-1)?.artifacts.length ?? 0) > 0).length;
+    const failuresWithEvidence = data.tests.filter((t) => t.results.some((r) => r.execution_status === "FAILED" && r.artifacts.length > 0)).length;
+    const anyEvidence = data.tests.some((t) => t.results.some((r) => r.evidence));
+    const proofs = issues
+      .map(({ test, issue }) => {
+        const record = data.verifications.find((v) => v.test_case_id === test.id);
+        if (issue.state === "verified" && issue.proof) {
+          const rec = data.verifications.find((v) => v.retest_result_id === issue.proof!.retest.id);
+          return { test, original: issue.proof.original, retest: issue.proof.retest, elapsedMs: issue.proof.elapsedMs, equivalence: issue.proof.equivalence, status: "verified" as const, reference: rec ? `POF-${rec.id.slice(0, 8).toUpperCase()}` : null };
+        }
+        if (issue.state === "regressed" && record?.status === "regressed") {
+          const o = test.results.find((r) => r.id === record.original_result_id);
+          const r = test.results.find((x) => x.id === record.retest_result_id);
+          if (o && r)
+            return { test, original: o, retest: r, elapsedMs: Date.parse(r.completed_at ?? r.created_at) - Date.parse(o.completed_at ?? o.created_at), equivalence: record.equivalence, status: "regressed" as const, reference: `POF-${record.id.slice(0, 8).toUpperCase()}` };
+        }
+        return null;
+      })
+      .filter((x): x is NonNullable<typeof x> => x !== null);
     const breakdown = nonConclusiveBreakdown(data.tests.map((t) => t.results.at(-1) ?? null));
     return {
       breakdown,
@@ -140,8 +166,13 @@ export function ReportView({ params }: { params: Promise<{ id: string }> }) {
       score,
       categories: Object.fromEntries(TEST_CATEGORIES.map((c) => [c, cat(c)])) as Record<TestCategory, number | null>,
       conclusiveRate: attempted ? Math.round((conclusive / attempted) * 100) : null,
-      fixRate: resolved + recurring ? Math.round((resolved / (resolved + recurring)) * 100) : null,
-      resolved,
+      fixRate: fixAttempts ? Math.round((verified / fixAttempts) * 100) : null,
+      resolved: verified,
+      verified,
+      latestWithEvidence,
+      failuresWithEvidence,
+      anyEvidence,
+      proofs,
     };
   }, [data]);
 
@@ -163,7 +194,7 @@ export function ReportView({ params }: { params: Promise<{ id: string }> }) {
     setRetesting(true);
     setRetestError(null);
     try {
-      const res = await fetch(`/api/inspections/${id}/retest`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ scope }) });
+      const res = await fetch(`/api/inspections/${id}/retest`, { method: "POST", headers: { "content-type": "application/json" }, body: JSON.stringify({ scope, mode: exactReplay ? "exact" : "focused" }) });
       const body = await res.json().catch(() => ({}));
       if (!res.ok) throw new Error(body.error ?? "Could not start retest");
       setRetestOpen(null);
@@ -276,7 +307,7 @@ export function ReportView({ params }: { params: Promise<{ id: string }> }) {
       <StatRow
         items={[
           { label: "Tests executed", value: executed, tone: "neutral", icon: FlaskConical, hint: `${tests.length} planned` },
-          { label: "Passed", value: n("PASSED"), tone: "green", icon: CheckCircle2, hint: derived.resolved ? `${derived.resolved} resolved` : undefined },
+          { label: "Passed", value: n("PASSED"), tone: "green", icon: CheckCircle2, hint: derived.verified ? `${derived.verified} fix${derived.verified === 1 ? "" : "es"} verified` : undefined },
           { label: "Failed", value: n("FAILED"), tone: "red", icon: XCircle, hint: "browser-confirmed" },
           { label: "Inconclusive", value: n("INCONCLUSIVE", "TIMEOUT"), tone: "yellow", icon: AlertTriangle, hint: n("ERROR") ? `${n("ERROR")} not executed` : undefined },
         ]}
@@ -362,6 +393,52 @@ export function ReportView({ params }: { params: Promise<{ id: string }> }) {
         </aside>
       </section>
 
+      <section className="mt-12 border-t border-border pt-9" aria-labelledby="evidence-heading">
+        <div className="flex flex-wrap items-baseline gap-x-4 gap-y-1">
+          <h2 id="evidence-heading" className="flex items-center gap-2 text-xl font-semibold tracking-tight">
+            <Camera className="size-5" /> Evidence
+          </h2>
+          <span className="text-sm text-muted sm:border-l sm:border-border sm:pl-4">Captured from the real browser session Kane drove</span>
+        </div>
+        <StatRow
+          className="mt-5"
+          items={[
+            { label: "Tests executed", value: executed, tone: "neutral", icon: FlaskConical },
+            { label: "With captured evidence", value: derived.latestWithEvidence, tone: "blue", icon: Camera, hint: "latest execution" },
+            { label: "Failures with evidence", value: derived.failuresWithEvidence, tone: "red", icon: XCircle },
+            { label: "Fixes verified", value: derived.verified, tone: "green", icon: ShieldCheck, hint: "Proof of Fix" },
+          ]}
+        />
+        {derived.proofs.length > 0 ? (
+          <div className="mt-6 space-y-5">
+            {derived.proofs.map((p) => (
+              <ProofOfFixCard
+                key={p.test.id}
+                inspectionId={inspection.id}
+                testCaseId={p.test.id}
+                title={p.original.analysis?.bug_report?.title ?? p.test.title}
+                original={p.original}
+                retest={p.retest}
+                elapsedMs={p.elapsedMs}
+                equivalence={p.equivalence}
+                status={p.status}
+                reference={p.reference}
+              />
+            ))}
+          </div>
+        ) : (
+          <p className="mt-5 rounded-3xl bg-surface-2 px-5 py-4 text-sm text-muted">
+            {!data.evidence_enabled
+              ? "Evidence storage is not enabled on this deployment — apply the Proof of Fix database migration."
+              : !derived.anyEvidence
+                ? "No browser evidence has been captured for this inspection yet."
+                : n("FAILED") > 0
+                  ? "No fix verified yet. Apply a fix, then use “Retest failed tests” — Kane re-executes the same test and CECH compares the evidence."
+                  : "No fixes to verify: no test has genuinely failed."}
+          </p>
+        )}
+      </section>
+
       {runs.length > 1 && (
         <section className="mt-12 border-t border-border pt-9">
           <h2 className="text-xl font-semibold tracking-tight">Verification history</h2>
@@ -390,7 +467,7 @@ export function ReportView({ params }: { params: Promise<{ id: string }> }) {
             </div>
           )}
           {tests.map((t) => (
-            <TestResultCard key={t.id} test={t} runs={runs} />
+            <TestResultCard key={t.id} test={t} runs={runs} inspectionId={inspection.id} evidenceEnabled={data.evidence_enabled} />
           ))}
         </div>
       </section>
@@ -407,6 +484,13 @@ export function ReportView({ params }: { params: Promise<{ id: string }> }) {
               <DemoModePanel compact />
             </div>
           )}
+          <label className="mt-5 flex cursor-pointer items-start gap-3 rounded-2xl bg-surface-2 p-4 text-sm">
+            <Checkbox checked={exactReplay} onCheckedChange={(v) => setExactReplay(v === true)} className="mt-0.5" aria-label="Replay the exact original objectives" />
+            <span>
+              <span className="font-medium">Replay the exact original objectives</span>
+              <span className="mt-0.5 block text-xs text-muted">Strongest Proof of Fix: Kane repeats the identical instructions. Leave off to let Groq write focused retests from the previous results.</span>
+            </span>
+          </label>
           {retestError && <p className="mt-3 text-sm text-danger">{retestError}</p>}
           <div className="mt-6 flex justify-end gap-2">
             <DialogClose asChild>

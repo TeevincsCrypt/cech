@@ -1,6 +1,8 @@
 import type {
   AiAnalysis,
   DemoSettings,
+  EvidenceArtifact,
+  FixVerification,
   Inspection,
   RunStatus,
   TestCase,
@@ -13,6 +15,8 @@ export type NewTestCase = Omit<TestCase, "id" | "created_at">;
 export type NewRun = Omit<VerificationRun, "id" | "created_at">;
 export type NewResult = Omit<TestResult, "id" | "created_at">;
 export type NewAnalysis = Omit<AiAnalysis, "id" | "created_at">;
+export type NewArtifact = Omit<EvidenceArtifact, "id" | "created_at">;
+export type NewFixVerification = Omit<FixVerification, "id" | "created_at">;
 
 export interface DashboardStats {
   totalInspections: number;
@@ -59,6 +63,17 @@ export interface Repository {
   listAnalyses(testResultIds: string[]): Promise<AiAnalysis[]>;
 
   getStats(): Promise<DashboardStats>;
+
+  // ---- Proof of Fix
+  /** False when the Proof of Fix migration hasn't been applied (Supabase). */
+  evidenceSupported(): Promise<boolean>;
+  /** Insert or replace the artifact for (test_result_id, kind). */
+  upsertArtifact(artifact: NewArtifact): Promise<EvidenceArtifact>;
+  getArtifact(id: string): Promise<EvidenceArtifact | null>;
+  listArtifactsForInspection(inspectionId: string): Promise<EvidenceArtifact[]>;
+  /** Insert or update the verification for (original_result_id, retest_result_id). */
+  upsertFixVerification(v: NewFixVerification): Promise<FixVerification>;
+  listFixVerifications(inspectionId: string): Promise<FixVerification[]>;
 
   getDemoSettings(): Promise<DemoSettings>;
   setDemoMode(mode: DemoSettings["mode"]): Promise<DemoSettings>;

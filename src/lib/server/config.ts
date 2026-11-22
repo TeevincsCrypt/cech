@@ -26,6 +26,10 @@ export const config = {
   // Vercel's filesystem is read-only except /tmp. Without Supabase, fall back to
   // /tmp there: data is ephemeral and per-instance (fine for a quick look only).
   localDataFile: process.env.CECH_LOCAL_DATA_FILE || (process.env.VERCEL ? "/tmp/cech-db.json" : ".data/cech-db.json"),
+  /** Private Supabase Storage bucket for evidence screenshots. */
+  evidenceBucket: process.env.CECH_EVIDENCE_BUCKET?.trim() || "cech-evidence",
+  /** Local evidence directory (development / no Supabase). */
+  artifactDir: process.env.CECH_ARTIFACT_DIR || (process.env.VERCEL ? "/tmp/cech-artifacts" : ".data/artifacts"),
   ephemeralStorage: Boolean(process.env.VERCEL) && !(process.env.NEXT_PUBLIC_SUPABASE_URL && process.env.SUPABASE_SERVICE_ROLE_KEY),
 };
 

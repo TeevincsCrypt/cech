@@ -26,6 +26,8 @@ const Test = z.object({
   cliVersion: z.string().max(40).nullable(),
   startedAt: z.string().max(40).nullable(),
   completedAt: z.string().max(40).nullable(),
+  // Proof of Fix evidence; validated strictly later by sanitizeEvidence().
+  evidence: z.unknown().optional(),
 });
 const Body = z.object({
   type: z.enum(["test_started", "test_progress", "test_completed", "job_completed"]),

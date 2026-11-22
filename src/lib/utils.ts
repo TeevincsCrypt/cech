@@ -41,3 +41,10 @@ export function hostOf(url: string): string {
     return url;
   }
 }
+
+/** Shallow copy of `obj` without `keys`. */
+export function omit<T extends object, K extends keyof T>(obj: T, ...keys: K[]): Omit<T, K> {
+  const out = { ...obj };
+  for (const k of keys) delete out[k];
+  return out;
+}

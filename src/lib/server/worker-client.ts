@@ -1,7 +1,7 @@
 import "server-only";
 import { timingSafeEqual } from "node:crypto";
 import { config } from "@/lib/server/config";
-import type { ErrorKind, ExecutionStatus, KaneStep } from "@/lib/types";
+import type { ArtifactKind, ErrorKind, ExecutionStatus, KaneStep } from "@/lib/types";
 
 /** Shape returned by the worker for each test (see worker/src/jobs.ts). */
 export interface WorkerTestOutcome {
@@ -21,6 +21,8 @@ export interface WorkerTestOutcome {
   cliVersion: string | null;
   startedAt: string | null;
   completedAt: string | null;
+  /** Proof of Fix evidence (unvalidated here; see sanitizeEvidence). */
+  evidence?: unknown;
 }
 
 export interface WorkerJob {
@@ -71,6 +73,48 @@ export function submitWorkerJob(job: { jobId: string; url: string; tests: Array<
 
 export function getWorkerJob(jobId: string) {
   return call<WorkerJob>(`/jobs/${encodeURIComponent(jobId)}`);
+}
+
+const SAFE_ID = /^[A-Za-z0-9_-]{1,64}$/;
+
+/**
+ * Download one captured screenshot from the worker. Only the configured worker
+ * URL and a fixed path are ever requested; the size is capped while streaming.
+ */
+export async function fetchWorkerArtifact(jobId: string, testCaseId: string, kind: ArtifactKind, maxBytes: number): Promise<Uint8Array> {
+  const w = requireWorker();
+  if (!SAFE_ID.test(jobId) || !SAFE_ID.test(testCaseId)) throw new WorkerError("Invalid artifact identifiers");
+  let res: Response;
+  try {
+    res = await fetch(`${w.url}/jobs/${jobId}/artifacts/${testCaseId}/${kind}`, {
+      cache: "no-store",
+      headers: { authorization: `Bearer ${w.secret}` },
+      signal: AbortSignal.timeout(20_000),
+    });
+  } catch (err) {
+    throw new WorkerError(`Worker unreachable while fetching evidence: ${(err as Error).message}`);
+  }
+  if (!res.ok || !res.body) throw new WorkerError(`Worker returned HTTP ${res.status} for evidence`, res.status);
+  const reader = res.body.getReader();
+  const chunks: Uint8Array[] = [];
+  let total = 0;
+  for (;;) {
+    const { done, value } = await reader.read();
+    if (done) break;
+    total += value.byteLength;
+    if (total > maxBytes) {
+      await reader.cancel().catch(() => {});
+      throw new WorkerError("Evidence artifact exceeds the size limit");
+    }
+    chunks.push(value);
+  }
+  const out = new Uint8Array(total);
+  let off = 0;
+  for (const c of chunks) {
+    out.set(c, off);
+    off += c.byteLength;
+  }
+  return out;
 }
 
 export async function getWorkerHealth(): Promise<Record<string, unknown> | null> {

@@ -17,5 +17,8 @@
     "@types/node": "^20",
     "tsx": "^4.23.15",
     "typescript": "^5"
+  },
+  "dependencies": {
+    "playwright-core": "^1.65.1"
   }
 }

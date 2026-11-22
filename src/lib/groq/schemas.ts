@@ -151,3 +151,56 @@ export const SummaryJsonSchema = {
     next_steps: { type: "array", items: { type: "string" } },
   },
 } as const;
+
+// ---------- Bug reproduction report (Proof of Fix) ----------
+export const BugReportSchema = z.object({
+  title: str(160).min(3),
+  severity: z.enum(["critical", "high", "medium", "low"]),
+  feature: str(120).min(1),
+  description: str(800).min(1),
+  expected_behavior: str(500).min(1),
+  actual_behavior: str(600).min(1),
+  steps_to_reproduce: z.array(str(300).min(1)).min(1).max(10),
+  observed_facts: z.array(str(400).min(1)).max(10),
+  evidence_refs: z.array(str(40)).max(20),
+  hypothesis: str(800),
+  recommendation: str(800).min(1),
+  retest_objective: str(900).min(20),
+  evidence_sufficient: z.boolean(),
+});
+export type BugReportOutput = z.infer<typeof BugReportSchema>;
+
+export const BugReportJsonSchema = {
+  type: "object",
+  additionalProperties: false,
+  required: [
+    "title",
+    "severity",
+    "feature",
+    "description",
+    "expected_behavior",
+    "actual_behavior",
+    "steps_to_reproduce",
+    "observed_facts",
+    "evidence_refs",
+    "hypothesis",
+    "recommendation",
+    "retest_objective",
+    "evidence_sufficient",
+  ],
+  properties: {
+    title: { type: "string" },
+    severity: { type: "string", enum: ["critical", "high", "medium", "low"] },
+    feature: { type: "string", description: "Affected website feature, e.g. 'Primary navigation — Pricing link'." },
+    description: { type: "string" },
+    expected_behavior: { type: "string" },
+    actual_behavior: { type: "string", description: "What Kane actually observed. Facts only." },
+    steps_to_reproduce: { type: "array", items: { type: "string" } },
+    observed_facts: { type: "array", items: { type: "string" }, description: "Facts taken directly from the evidence, each citing an evidence id in brackets." },
+    evidence_refs: { type: "array", items: { type: "string" }, description: "Only ids from the provided evidence list." },
+    hypothesis: { type: "string", description: "Possible cause, clearly framed as a hypothesis. Empty if evidence is insufficient." },
+    recommendation: { type: "string" },
+    retest_objective: { type: "string" },
+    evidence_sufficient: { type: "boolean" },
+  },
+} as const;

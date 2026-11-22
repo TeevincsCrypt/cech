@@ -5,6 +5,8 @@ import path from "node:path";
 import type {
   AiAnalysis,
   DemoSettings,
+  EvidenceArtifact,
+  FixVerification,
   Inspection,
   TestCase,
   TestResult,
@@ -19,6 +21,8 @@ interface Db {
   test_results: TestResult[];
   ai_analyses: AiAnalysis[];
   demo_settings: DemoSettings;
+  evidence_artifacts: EvidenceArtifact[];
+  fix_verifications: FixVerification[];
 }
 
 const emptyDb = (): Db => ({
@@ -28,6 +32,8 @@ const emptyDb = (): Db => ({
   test_results: [],
   ai_analyses: [],
   demo_settings: { mode: "broken", updated_at: new Date().toISOString() },
+  evidence_artifacts: [],
+  fix_verifications: [],
 });
 
 const now = () => new Date().toISOString();
@@ -213,6 +219,43 @@ export class LocalFileRepository implements Repository {
         issuesDetected: executed.filter((r) => r.execution_status === "FAILED").length,
       };
     }, false);
+  }
+
+  async evidenceSupported() {
+    return true;
+  }
+  upsertArtifact(a: Parameters<Repository["upsertArtifact"]>[0]) {
+    return this.tx((db) => {
+      const existing = db.evidence_artifacts.find((x) => x.test_result_id === a.test_result_id && x.kind === a.kind);
+      if (existing) {
+        Object.assign(existing, a);
+        return existing;
+      }
+      const row: EvidenceArtifact = { ...a, id: randomUUID(), created_at: now() };
+      db.evidence_artifacts.push(row);
+      return row;
+    }, true);
+  }
+  getArtifact(id: string) {
+    return this.tx((db) => db.evidence_artifacts.find((x) => x.id === id) ?? null, false);
+  }
+  listArtifactsForInspection(inspectionId: string) {
+    return this.tx((db) => db.evidence_artifacts.filter((x) => x.inspection_id === inspectionId), false);
+  }
+  upsertFixVerification(v: Parameters<Repository["upsertFixVerification"]>[0]) {
+    return this.tx((db) => {
+      const existing = db.fix_verifications.find((x) => x.original_result_id === v.original_result_id && x.retest_result_id === v.retest_result_id);
+      if (existing) {
+        Object.assign(existing, v);
+        return existing;
+      }
+      const row: FixVerification = { ...v, id: randomUUID(), created_at: now() };
+      db.fix_verifications.push(row);
+      return row;
+    }, true);
+  }
+  listFixVerifications(inspectionId: string) {
+    return this.tx((db) => db.fix_verifications.filter((x) => x.inspection_id === inspectionId), false);
   }
 
   getDemoSettings() {

@@ -9,6 +9,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { useApi } from "@/lib/client/use-api";
 
 interface Health {
+  evidence?: { migration: boolean; storage: string };
   integrations: { groq: boolean; groqModel: string; supabase: boolean; worker: boolean; storage: string; ephemeralStorage: boolean; ssrfAllowlist: string[] };
   worker: null | {
     ok?: boolean;
@@ -95,6 +96,12 @@ export function SettingsView() {
                   ) : (
                     <span className="block">Using a local JSON file (development only).</span>
                   ))}
+              </Row>
+              <Row label="Proof of Fix evidence" ok={data.evidence ? data.evidence.migration : null}>
+                Screenshots stored in: <code className="font-mono">{data.evidence?.storage ?? "—"}</code>
+                {data.evidence && !data.evidence.migration && (
+                  <span className="block text-warning">Apply supabase/migrations/20261122000000_proof_of_fix.sql to enable evidence storage.</span>
+                )}
               </Row>
             </CardContent>
           </Card>
