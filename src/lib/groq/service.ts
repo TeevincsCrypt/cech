@@ -8,6 +8,7 @@ import type {
   ExecutionEvidence,
   ExecutionStatus,
   InspectionSummary,
+  Priority,
   TestCase,
   TestCategory,
   TestResult,
@@ -191,7 +192,7 @@ stderr tail: ${tail(result.stderr, 800)}
         { role: "user", content: payload },
       ],
     });
-    return normalizeAnalysis(data, result.execution_status, model);
+    return normalizeAnalysis(data, result.execution_status, model, test.priority);
   } catch (err) {
     if (!(err instanceof GroqUnavailableError)) throw err;
     return {
@@ -210,14 +211,28 @@ stderr tail: ${tail(result.stderr, 800)}
   }
 }
 
+const SEVERITY_ORDER = ["none", "low", "medium", "high", "critical"] as const;
+const SEVERITY_CAP: Record<Priority, (typeof SEVERITY_ORDER)[number]> = { low: "medium", medium: "high", high: "critical" };
+
+/**
+ * Keep AI severity proportionate to what the test checks: a low-priority
+ * (cosmetic/semantic) check can't be rated above medium, a medium one above
+ * high. Only affects the AI interpretation — never Kane's outcome.
+ */
+export function capSeverity<S extends (typeof SEVERITY_ORDER)[number]>(severity: S, priority: Priority | undefined): S {
+  if (!priority) return severity;
+  const cap = SEVERITY_CAP[priority];
+  return (SEVERITY_ORDER.indexOf(severity) > SEVERITY_ORDER.indexOf(cap) ? cap : severity) as S;
+}
+
 /** Keep AI output consistent with (never overriding) the Kane outcome. */
-export function normalizeAnalysis(data: AnalysisOutput, status: ExecutionStatus, model: string | null): AnalysisRecord {
+export function normalizeAnalysis(data: AnalysisOutput, status: ExecutionStatus, model: string | null, priority?: Priority): AnalysisRecord {
   const passed = status === "PASSED";
   return {
     source: "groq",
     summary: data.summary,
     issue_detected: passed ? false : data.issue_detected,
-    severity: passed ? "none" : data.severity,
+    severity: passed ? "none" : capSeverity(data.severity, priority),
     title: data.title,
     description: data.description || null,
     expected_behavior: data.expected_behavior || null,
@@ -423,7 +438,8 @@ ${catalog.map((c) => `[${c.id}] ${c.text}`).join("\n") || "(no evidence captured
         { role: "user", content: payload },
       ],
     });
-    return { report: enforceEvidenceGrounding(data, allowed, input.url), error: null };
+    const report = enforceEvidenceGrounding(data, allowed, input.url);
+    return { report: { ...report, severity: capSeverity(report.severity, input.test.priority) }, error: null };
   } catch (err) {
     if (!(err instanceof GroqUnavailableError)) throw err;
     return { report: null, error: err.message };

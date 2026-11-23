@@ -103,3 +103,25 @@ describe("analysis normalisation", () => {
     expect(sanitizeObjective("Click Pricing\n\u0007and verify", "https://a.dev")).toBe("Go to https://a.dev and click Pricing and verify");
   });
 });
+
+describe("proportionate severity", () => {
+  it("caps severity by test priority: cosmetic checks can't become major issues", async () => {
+    const { capSeverity, normalizeAnalysis } = await import("@/lib/groq/service");
+    expect(capSeverity("critical", "low")).toBe("medium");
+    expect(capSeverity("high", "low")).toBe("medium");
+    expect(capSeverity("low", "low")).toBe("low");
+    expect(capSeverity("critical", "medium")).toBe("high");
+    expect(capSeverity("critical", "high")).toBe("critical");
+    // e.g. a low-priority "homepage has an <h1>" check rated critical by the model
+    const out = normalizeAnalysis({ ...validAnalysis, severity: "critical" } as never, "FAILED", "m", "low");
+    expect(out.severity).toBe("medium");
+  });
+
+  it("the fallback plan never treats the homepage heading check as high priority", async () => {
+    const { baselinePlan } = await import("@/lib/groq/baseline");
+    const probe = { ok: true, finalUrl: null, status: 200, title: null, headings: [], links: [], buttons: [], forms: [], error: null };
+    const t = baselinePlan("https://a.dev/", ["interface"], probe).tests[0];
+    expect(t.priority).not.toBe("high");
+    expect(t.objective).not.toMatch(/main heading is visible/);
+  });
+});

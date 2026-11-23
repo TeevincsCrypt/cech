@@ -27,9 +27,9 @@ export function baselinePlan(url: string, categories: TestCategory[], probe: Sit
       add({
         category: "interface",
         title: "Homepage renders its main content",
-        objective: `Go to ${url} and wait for the page to load. Verify that a main heading is visible and the page shows primary content with no visible error message.`,
-        expected_outcome: "The homepage loads with a visible main heading and content.",
-        priority: "high",
+        objective: `Go to ${url} and wait for the page to load. Verify that the page shows its primary content (a heading or main text) and no visible error message.`,
+        expected_outcome: "The homepage loads and shows its primary content without an error message.",
+        priority: "medium",
         assumption: "",
       });
     }
